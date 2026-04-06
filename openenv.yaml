@@ -1,0 +1,76 @@
+name: ascdc-env
+version: "1.0.0"
+description: "Adaptive System Control with Delayed Consequences environment"
+entry_point: server.app:app
+action_schema:
+  type: object
+  properties:
+    action_type:
+      type: string
+      enum:
+        - restart
+        - scale
+        - throttle
+        - noop
+    target:
+      type: string
+      enum:
+        - A
+        - B
+        - C
+      nullable: true
+    amount:
+      type: number
+      nullable: true
+  required:
+    - action_type
+observation_schema:
+  type: object
+  properties:
+    queues:
+      type: object
+      additionalProperties:
+        type: number
+    latencies:
+      type: object
+      additionalProperties:
+        type: number
+    retry_rate:
+      type: number
+    error_rate:
+      type: number
+    system_pressure:
+      type: number
+    remaining_budget:
+      type: number
+    timestep:
+      type: integer
+    done:
+      type: boolean
+  required:
+    - queues
+    - latencies
+    - retry_rate
+    - error_rate
+    - system_pressure
+    - remaining_budget
+    - timestep
+    - done
+state_schema:
+  type: object
+  properties:
+    timestep:
+      type: integer
+    remaining_budget:
+      type: number
+    history_length:
+      type: integer
+    active_locks:
+      type: object
+      additionalProperties:
+        type: integer
+  required:
+    - timestep
+    - remaining_budget
+    - history_length
+    - active_locks

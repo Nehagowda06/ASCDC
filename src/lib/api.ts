@@ -3,6 +3,7 @@ import type {
   BaselineResults,
   EnvironmentState,
   Observation,
+  RecommendationResponse,
   StepResponse,
   TaskMap,
   TrajectoryStep,
@@ -31,21 +32,58 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function fetchState() {
+function normalizeAction(action: AgentAction) {
+  const actionType = (action.action_type ?? action.type ?? "noop").toLowerCase();
+
+  if (actionType === "noop") {
+    return {
+      type: "noop",
+      target: null,
+    };
+  }
+
+  return {
+    ...action,
+    type: actionType,
+    action_type: actionType,
+    target: action.target ?? null,
+  };
+}
+
+export function getState() {
   return request<EnvironmentState>("/state");
 }
 
-export function resetEnvironment(taskId?: string) {
+export function fetchState() {
+  return getState();
+}
+
+export function reset(taskId?: string) {
   const query = taskId ? `?task_id=${encodeURIComponent(taskId)}` : "";
   return request<Observation>(`/reset${query}`, {
     method: "POST",
   });
 }
 
-export function stepEnvironment(action: AgentAction) {
+export function resetEnvironment(taskId?: string) {
+  return reset(taskId);
+}
+
+export function step(action: AgentAction) {
   return request<StepResponse>("/step", {
     method: "POST",
-    body: JSON.stringify(action),
+    body: JSON.stringify(normalizeAction(action)),
+  });
+}
+
+export function stepEnvironment(action: AgentAction) {
+  return step(action);
+}
+
+export function recommend(currentState?: Partial<EnvironmentState> | Partial<Observation>) {
+  return request<RecommendationResponse>("/recommend", {
+    method: "POST",
+    body: JSON.stringify(currentState ?? {}),
   });
 }
 

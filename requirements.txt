@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pydantic
+typing-extensions
+torch
+huggingface_hub

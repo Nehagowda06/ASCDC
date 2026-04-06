@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from core.counterfactual import CounterfactualEvaluator
+
 
 class TaskRunner:
     def __init__(self, env: Any):
@@ -9,6 +11,7 @@ class TaskRunner:
         env: instance of ASCDCEnvironment
         """
         self.env = env
+        self.counterfactual_evaluator = CounterfactualEvaluator()
 
     def run_task(self, task_config: dict, agent: Any) -> List[Dict[str, Any]]:
         """
@@ -28,9 +31,11 @@ class TaskRunner:
         while not done:
             # Agent selects action
             action = agent.act(observation)
+            counterfactual = self.counterfactual_evaluator.evaluate(self.env, action)
 
             # Environment step
             next_observation, reward, done, info = self.env.step(action)
+            info.update(counterfactual)
 
             # Store full transition (grader-critical)
             trajectory.append(

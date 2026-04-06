@@ -57,7 +57,6 @@ class EvaluationPipeline:
 
         # 4. Extract summary metrics
         latencies = [step["info"]["latency"] for step in trajectory]
-        pressures = [step["info"]["system_pressure"] for step in trajectory]
 
         stability = max(0.0, 1.0 - (sum(latencies) / len(latencies)) / 10.0)
 

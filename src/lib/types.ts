@@ -27,9 +27,12 @@ export type Observation = {
   system_pressure?: number;
   pending_actions?: PendingAction[];
   timestep?: number;
+  done?: boolean;
 };
 
 export type EnvironmentState = Observation & {
+  history_length?: number;
+  active_locks?: Record<string, number>;
   true_load?: QueueMap;
   delayed_effect_queue?: Record<string, Array<Record<string, unknown>>>;
   failure_flags?: FailureFlags;
@@ -40,6 +43,8 @@ export type EnvironmentState = Observation & {
 export type AgentAction = {
   type: string;
   target: string | null;
+  action_type?: string;
+  amount?: number | null;
 };
 
 export type StepInfo = {
@@ -50,6 +55,8 @@ export type StepInfo = {
   scheduled_timestep?: number;
   pressure_delta?: number;
   stability_score?: number;
+  counterfactual_impact?: number;
+  was_action_necessary?: boolean;
   failure_flags: FailureFlags;
 };
 
@@ -67,6 +74,39 @@ export type TaskItem = {
 
 export type TaskMap = Record<string, TaskItem>;
 export type BaselineResults = Record<string, Record<string, number>>;
+
+export type RecommendationAlternative = {
+  action: AgentAction;
+  label: string;
+  impact: number;
+  necessary: boolean;
+};
+
+export type RecommendationReasoning = {
+  best_action: string;
+  confidence: number;
+  impact: number;
+  was_necessary: boolean;
+  alternative_actions: RecommendationAlternative[];
+  explanation?: string;
+};
+
+export type RecommendationResponse = {
+  action: AgentAction;
+  impact: number;
+  was_necessary: boolean;
+  confidence: number;
+  explanation: string;
+  evaluated_actions: RecommendationAlternative[];
+  reasoning: RecommendationReasoning;
+};
+
+export type DecisionMetrics = {
+  totalReward: number;
+  necessaryActionRatio: number;
+  averageImpact: number;
+  positiveImpactRate: number;
+};
 
 export type TrajectoryStep = {
   timestep: number;
@@ -90,6 +130,7 @@ export const EMPTY_OBSERVATION: Observation = {
   system_pressure: 0,
   pending_actions: [],
   timestep: 0,
+  done: false,
 };
 
 export const EMPTY_STATE: EnvironmentState = {

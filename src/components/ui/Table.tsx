@@ -10,6 +10,7 @@ type TableProps<T> = {
   columns: Array<Column<T>>;
   rows: T[];
   getRowKey: (row: T, index: number) => string;
+  getRowClassName?: (row: T, index: number) => string | undefined;
   emptyMessage?: string;
 };
 
@@ -17,6 +18,7 @@ export function Table<T>({
   columns,
   rows,
   getRowKey,
+  getRowClassName,
   emptyMessage = "No records available.",
 }: TableProps<T>) {
   return (
@@ -46,7 +48,10 @@ export function Table<T>({
             </tr>
           ) : (
             rows.map((row, index) => (
-              <tr key={getRowKey(row, index)} className="border-t border-gray-100">
+              <tr
+                key={getRowKey(row, index)}
+                className={`border-t border-gray-100 ${getRowClassName?.(row, index) ?? ""}`}
+              >
                 {columns.map((column) => (
                   <td key={column.key} className="p-4 align-top text-sm text-gray-900">
                     {column.render(row)}
