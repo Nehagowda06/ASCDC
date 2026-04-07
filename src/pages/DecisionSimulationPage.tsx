@@ -43,20 +43,29 @@ export function DecisionSimulationPage({
     >
       <Section title="Scenario control" description="Choose a task configuration and reset the environment into a deterministic operating condition.">
         <Card className="shadow-sm">
-          <div className="flex flex-wrap gap-3">
-            {Object.entries(tasks).map(([taskId, task]) => (
-              <Button
-                key={taskId}
-                disabled={loading}
-                variant={selectedTask === taskId ? "primary" : "secondary"}
-                onClick={() => onReset(taskId)}
-              >
-                {task.name}
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3">
+              {Object.entries(tasks).map(([taskId, task]) => (
+                <Button
+                  key={taskId}
+                  disabled={loading}
+                  variant={selectedTask === taskId ? "primary" : "secondary"}
+                  onClick={() => onReset(taskId)}
+                >
+                  {task.name}
+                </Button>
+              ))}
+              <Button disabled={loading} variant="secondary" onClick={() => onReset()}>
+                Reset default
               </Button>
-            ))}
-            <Button disabled={loading} variant="secondary" onClick={() => onReset()}>
-              Reset default
-            </Button>
+            </div>
+
+            {selectedTask && tasks[selectedTask] ? (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-sm font-medium text-gray-900">{tasks[selectedTask].name}</p>
+                <p className="mt-1 text-sm leading-6 text-gray-500">{tasks[selectedTask].description}</p>
+              </div>
+            ) : null}
           </div>
         </Card>
       </Section>

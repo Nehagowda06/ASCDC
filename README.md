@@ -121,6 +121,40 @@ These metrics evaluate decision quality, not just system outcomes.
 
 ## How to Run
 
+### Quick Setup (Hackathon)
+
+```bash
+# Clone and setup
+git clone <repository-url>
+cd ascdc-openenv
+python setup.py
+
+# Start backend
+python -m uvicorn server.app:app --reload --port 8000
+
+# Start frontend (in another terminal)
+npm run dev
+
+# Open browser
+open http://localhost:5173
+```
+
+### Manual Installation
+
+```bash
+# Install PyTorch (CPU version for Windows)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start services
+python -m uvicorn server.app:app --reload --port 8000
+npm run dev
+```
+
+### Docker Setup
+
 ```bash
 docker build -t ascdc .
 docker run -p 8000:8000 ascdc

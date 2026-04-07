@@ -89,6 +89,11 @@ export type RecommendationReasoning = {
   was_necessary: boolean;
   alternative_actions: RecommendationAlternative[];
   explanation?: string;
+  agent_name?: string;
+  agent_action?: string;
+  agent_action_impact?: number | null;
+  agent_action_rank?: number | null;
+  agent_action_matches_best?: boolean;
 };
 
 export type RecommendationResponse = {

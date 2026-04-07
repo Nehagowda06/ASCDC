@@ -52,6 +52,13 @@ export function DecisionPanel({
       : confidence >= 40
         ? "bg-amber-500"
         : "bg-red-500";
+  const showAgentOverride =
+    recommendation.reasoning.agent_action_matches_best === false &&
+    recommendation.reasoning.agent_action &&
+    recommendation.reasoning.agent_name;
+  const noopSummary = recommendation.reasoning.explanation?.includes("stable enough")
+    ? "Waiting is the strongest option right now"
+    : "Intervening now scores worse than waiting";
 
   return (
     <Card className="bg-white rounded-2xl shadow-md p-6 text-gray-900 border border-gray-200 transition-all duration-200 hover:shadow-lg hover:scale-[1.01]">
@@ -71,7 +78,7 @@ export function DecisionPanel({
               <div className="space-y-2">
                 <p className="text-3xl font-bold">No intervention recommended</p>
                 <p className="text-sm leading-6 text-amber-800">
-                  System stabilizes without action
+                  {noopSummary}
                 </p>
               </div>
             </div>
@@ -87,6 +94,20 @@ export function DecisionPanel({
           <p className="max-w-3xl text-sm leading-6 text-gray-600">
             {recommendation.reasoning.explanation ?? "Counterfactual simulation favors this action."}
           </p>
+
+          {showAgentOverride ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-medium">
+                {recommendation.reasoning.agent_name} proposed {recommendation.reasoning.agent_action}.
+              </p>
+              <p className="mt-1 leading-6 text-amber-800">
+                It ranked {recommendation.reasoning.agent_action_rank ?? "?"} in the counterfactual comparison
+                {typeof recommendation.reasoning.agent_action_impact === "number"
+                  ? ` with impact ${formatNumber(recommendation.reasoning.agent_action_impact, 2)}.`
+                  : "."}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">

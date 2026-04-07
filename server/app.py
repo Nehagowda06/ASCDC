@@ -10,7 +10,8 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
 from core.counterfactual import CounterfactualEvaluator
-from core.operator_agent import OperatorAgent
+from core.simple_recommendation import SimpleRecommendationSystem
+from agents import get_available_agents, set_agent, get_current_agent_name, get_metrics, update_metrics, reset_metrics
 from core.pipeline import EvaluationPipeline, NoOpAgent, ThresholdAgent, GreedyAgent
 from env.environment import ASCDCEnvironment
 from grader.grader import ASCDCGrader
@@ -30,11 +31,8 @@ app.description = (
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -50,14 +48,14 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# Single environment instance (stateless enough for validation)
-active_env = ASCDCEnvironment(seed=42)
-
-grader = ASCDCGrader()
+# Initialize environment and simple recommendation system
+active_env = ASCDCEnvironment()
+recommendation_system = SimpleRecommendationSystem(active_env)
 counterfactual_evaluator = CounterfactualEvaluator()
-operator_agent = OperatorAgent(active_env)
 
 pipeline = EvaluationPipeline(TASKS)
+grader = ASCDCGrader()
+baseline_results_cache: Optional[Dict[str, Dict[str, float]]] = None
 
 
 def _json_safe(value: Any) -> Any:
@@ -109,8 +107,8 @@ def root():
 
 @app.post(
     "/reset",
-    summary="Reset the active environment",
-    description="Resets the active ASCDC environment and optionally loads one of the predefined deterministic task configurations.",
+    summary="Reset active environment",
+    description="Resets active ASCDC environment and optionally loads one of predefined deterministic task configurations.",
 )
 def reset(task_id: Optional[str] = None):
     logger.info("[RESET] task_id=%s", task_id)
@@ -124,7 +122,7 @@ def reset(task_id: Optional[str] = None):
         config = None
 
     obs = active_env.reset(config=config)
-    operator_agent.history.clear()
+    reset_metrics()  # Reset simple metrics
 
     return _json_safe(obs)
 
@@ -139,9 +137,42 @@ def reset(task_id: Optional[str] = None):
     ),
 )
 def recommend_action(current_state: Optional[Dict[str, Any]] = None):
-    observation = current_state if current_state else active_env.state().model_dump()
-    recommendation = operator_agent.act(observation)
-    return _json_safe(recommendation)
+    try:
+        recommendation = recommendation_system.recommend(current_state)
+        return _json_safe(recommendation)
+    except Exception as e:
+        logger.error(f"Recommendation failed: {e}")
+        return _json_safe({
+            "action": {"type": "noop", "target": None},
+            "impact": 0.0,
+            "was_necessary": False,
+            "confidence": 0.1,
+            "explanation": "Recommendation system error - using noop fallback",
+            "evaluated_actions": [{
+                "action": {"type": "noop", "target": None},
+                "label": "NOOP",
+                "impact": 0.0,
+                "necessary": False
+            }],
+            "reasoning": {
+                "best_action": "NOOP",
+                "confidence": 0.1,
+                "impact": 0.0,
+                "was_necessary": False,
+                "alternative_actions": [{
+                    "action": {"type": "noop", "target": None},
+                    "label": "NOOP",
+                    "impact": 0.0,
+                    "necessary": False
+                }],
+                "explanation": "Recommendation system error - using noop fallback",
+                "agent_name": get_current_agent_name(),
+                "agent_action": "NOOP",
+                "agent_action_impact": 0.0,
+                "agent_action_rank": 1,
+                "agent_action_matches_best": True
+            }
+        })
 
 
 @app.get(
@@ -150,7 +181,12 @@ def recommend_action(current_state: Optional[Dict[str, Any]] = None):
     description="Returns whether the optional PyTorch policy model is loaded and whether it came from local storage or Hugging Face.",
 )
 def get_model_info():
-    return _json_safe(operator_agent.model_info())
+    return _json_safe({
+        "loaded": True,
+        "source": "simple_agent",
+        "agent_name": get_current_agent_name(),
+        "strategy": get_current_agent_name().replace("simple-", "", 1),
+    })
 
 
 @app.post(
@@ -173,6 +209,10 @@ def step(action: Dict[str, Any]):
         counterfactual = counterfactual_evaluator.evaluate(active_env, normalized_action)
         obs, reward, done, info = active_env.step(normalized_action)
         info.update(counterfactual)
+        
+        # Update simple metrics
+        update_metrics(reward, normalized_action, info)
+        
         duration = time.time() - start
         logger.info("[STEP] took %.4fs", duration)
         return _json_safe({
@@ -230,22 +270,70 @@ def grade(trajectory: List[Dict[str, Any]]):
 @app.post(
     "/baseline",
     summary="Run built-in baselines",
-    description="Evaluates the built-in noop, threshold, and greedy agents across all tasks using deterministic task configurations and grading.",
+    description="Evaluates built-in noop, threshold, and greedy agents across all tasks using deterministic task configurations and grading.",
 )
 def run_baseline():
-    agents = {
-        "noop": NoOpAgent(),
-        "threshold": ThresholdAgent(),
-        "greedy": GreedyAgent()
-    }
+    global baseline_results_cache
 
-    results = {}
+    try:
+        if baseline_results_cache is not None:
+            return _json_safe(baseline_results_cache)
 
-    for agent_name, agent in agents.items():
-        results[agent_name] = {}
+        agents = {
+            "noop": NoOpAgent(),
+            "threshold": ThresholdAgent(),
+            "greedy": GreedyAgent()
+        }
 
-        for task_id in TASKS.keys():
-            result = pipeline.run_evaluation(task_id, agent)
-            results[agent_name][task_id] = result["score"]
+        results = {}
 
-    return _json_safe(results)
+        for agent_name, agent in agents.items():
+            results[agent_name] = {}
+
+            for task_id in TASKS.keys():
+                try:
+                    result = pipeline.run_evaluation(task_id, agent)
+                    results[agent_name][task_id] = result["score"]
+                except Exception as e:
+                    logger.error(f"Error evaluating {agent_name} on {task_id}: {e}")
+                    results[agent_name][task_id] = 0.0
+
+        baseline_results_cache = results
+        return _json_safe(results)
+    except Exception as e:
+        logger.error(f"Baseline evaluation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Baseline evaluation failed: {str(e)}")
+
+
+@app.get("/agents")
+def get_agents():
+    """Get list of available agents."""
+    return _json_safe({
+        "available": get_available_agents(),
+        "current": get_current_agent_name(),
+    })
+
+
+@app.post("/agents/{agent_name}")
+def switch_agent(agent_name: str):
+    """Switch to a different agent."""
+    if set_agent(agent_name):
+        return _json_safe({
+            "message": f"Switched to agent: {agent_name}",
+            "agent": agent_name
+        })
+    else:
+        raise HTTPException(status_code=404, detail=f"Agent not found: {agent_name}")
+
+
+@app.get("/metrics")
+def get_simple_metrics():
+    """Get current decision metrics."""
+    return _json_safe(get_metrics())
+
+
+@app.post("/metrics/reset")
+def reset_simple_metrics():
+    """Reset decision metrics."""
+    reset_metrics()
+    return _json_safe({"message": "Metrics reset"})

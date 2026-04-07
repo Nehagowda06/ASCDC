@@ -9,27 +9,82 @@ import type {
   TrajectoryStep,
 } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE?.trim();
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    const detail =
-      payload && typeof payload === "object" && "detail" in payload
-        ? String(payload.detail)
-        : `Request failed with status ${response.status}`;
-    throw new Error(detail);
+function getApiBaseCandidates() {
+  if (API_BASE) {
+    return [API_BASE.replace(/\/+$/, "")];
   }
 
-  return response.json() as Promise<T>;
+  if (typeof window === "undefined") {
+    return ["http://localhost:8000"];
+  }
+
+  const { hostname, origin, port, protocol } = window.location;
+  const candidates: string[] = [];
+  const normalizedOrigin = origin.replace(/\/+$/, "");
+
+  if (protocol.startsWith("http") && (port === "5173" || port === "4173")) {
+    candidates.push(`${protocol}//${hostname}:8000`);
+    candidates.push(normalizedOrigin);
+  } else if (protocol.startsWith("http")) {
+    candidates.push(normalizedOrigin);
+    candidates.push(`${protocol}//${hostname}:8000`);
+  } else {
+    candidates.push("http://localhost:8000");
+  }
+
+  candidates.push("http://127.0.0.1:8000");
+  candidates.push("http://localhost:8000");
+
+  return [...new Set(candidates.map((candidate) => candidate.replace(/\/+$/, "")))];
+}
+
+async function parseError(response: Response) {
+  const payload = await response.json().catch(() => null);
+
+  if (payload && typeof payload === "object") {
+    if ("detail" in payload) {
+      return String(payload.detail);
+    }
+
+    if ("error" in payload) {
+      return String(payload.error);
+    }
+  }
+
+  return `Request failed with status ${response.status}`;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (const apiBase of getApiBaseCandidates()) {
+    try {
+      const response = await fetch(`${apiBase}${path}`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(init?.headers ?? {}),
+        },
+        ...init,
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseError(response));
+      }
+
+      return response.json() as Promise<T>;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Request failed.");
+
+      // Only fall through to the next candidate for network-level failures.
+      if (!/Failed to fetch|NetworkError|Load failed/i.test(lastError.message)) {
+        throw lastError;
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Request failed.");
 }
 
 function normalizeAction(action: AgentAction) {
@@ -101,5 +156,26 @@ export function gradeTrajectory(trajectory: TrajectoryStep[]) {
   return request<{ score: number }>("/grader", {
     method: "POST",
     body: JSON.stringify(trajectory),
+  });
+}
+
+// New agent management functions
+export function getAgents() {
+  return request<{ available: string[]; current: string }>("/agents");
+}
+
+export function switchAgent(agentName: string) {
+  return request<{ message: string; agent: string }>(`/agents/${agentName}`, {
+    method: "POST",
+  });
+}
+
+export function getSimpleMetrics() {
+  return request<any>("/metrics");
+}
+
+export function resetSimpleMetrics() {
+  return request<{ message: string }>("/metrics/reset", {
+    method: "POST",
   });
 }

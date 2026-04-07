@@ -8,15 +8,24 @@ from typing import Any, Dict, Iterable, Mapping
 class CounterfactualEvaluator:
     def __init__(self, horizon: int = 5) -> None:
         self.horizon = max(3, min(5, int(horizon)))
+        self.min_significant_impact = 0.75
+        self.min_positive_impact = 0.4
+        self.relative_impact_floor = 0.12
 
     def evaluate(self, env: Any, action: Any) -> Dict[str, Any]:
         action_outcome = self._simulate(env, action)
         noop_outcome = self._simulate(env, {"type": "noop", "target": None})
         impact = self._safe_float(action_outcome - noop_outcome)
+        impact_ratio = impact / max(abs(noop_outcome), 1.0)
+        meaningful_impact = self._has_meaningful_impact(action, impact, impact_ratio)
 
         return {
             "counterfactual_impact": round(impact, 6),
-            "was_action_necessary": self._is_action_necessary(action, impact),
+            "counterfactual_ratio": round(impact_ratio, 6),
+            "action_rollout_reward": round(action_outcome, 6),
+            "noop_rollout_reward": round(noop_outcome, 6),
+            "had_meaningful_impact": meaningful_impact,
+            "was_action_necessary": self._is_action_necessary(action, impact, impact_ratio),
         }
 
     def _simulate(self, env: Any, initial_action: Any) -> float:
@@ -34,8 +43,19 @@ class CounterfactualEvaluator:
 
         return self._safe_float(total_reward)
 
-    def _is_action_necessary(self, action: Any, impact: float) -> bool:
-        return self._get_action_type(action) != "noop" and impact > 0.0
+    def _has_meaningful_impact(self, action: Any, impact: float, impact_ratio: float) -> bool:
+        return (
+            self._get_action_type(action) != "noop"
+            and impact >= self.min_positive_impact
+            and impact_ratio >= 0.06
+        )
+
+    def _is_action_necessary(self, action: Any, impact: float, impact_ratio: float) -> bool:
+        return (
+            self._get_action_type(action) != "noop"
+            and impact >= self.min_significant_impact
+            and impact_ratio >= self.relative_impact_floor
+        )
 
     @staticmethod
     def _get_action_type(action: Any) -> str:
@@ -78,7 +98,10 @@ def compute_counterfactual_metrics(trajectory: Iterable[Mapping[str, Any]]) -> D
         for step in action_steps
         if bool(step.get("info", {}).get("was_action_necessary", False))
     )
-    positive_impacts = sum(1 for impact in impacts if impact > 0.0)
+    positive_impacts = sum(
+        1 for step in action_steps
+        if bool(step.get("info", {}).get("had_meaningful_impact", False))
+    )
     total_actions = len(action_steps)
 
     return {

@@ -50,21 +50,35 @@ class OperatorAgent:
         ]
 
         if best_candidate["action"]["type"] == "noop":
-            if second_candidate["impact"] > -0.5:
-                chosen = second_candidate
+            # Only choose noop if it's truly the best option
+            if non_noop_actions and any(a["impact"] > 0.1 for a in non_noop_actions):
+                # There are beneficial actions available
+                best_positive = max([a for a in non_noop_actions if a["impact"] > 0.1], key=lambda x: x["impact"])
+                if best_positive["impact"] > abs(best_candidate["impact"]):
+                    chosen = best_positive
+                else:
+                    chosen = best_candidate
             else:
                 chosen = best_candidate
         else:
             chosen = best_candidate
 
-        if all(a["impact"] <= 0 for a in non_noop_actions):
+        # Override logic for clearly negative actions
+        if chosen["action"]["type"] != "noop" and chosen["impact"] < -0.2:
             if non_noop_actions:
-                chosen = max(non_noop_actions, key=lambda x: x["score"])
+                best_alternative = max(non_noop_actions, key=lambda x: x["score"])
+                if best_alternative["impact"] > chosen["impact"]:
+                    chosen = best_alternative
 
-        if random.random() < 0.1:
+        # Reduced random exploration - only when actions are very close
+        if random.random() < 0.05:  # Reduced from 0.1
             non_noop = [a for a in evaluated_actions if a["action"]["type"] != "noop"]
-            if non_noop:
-                chosen = random.choice(non_noop)
+            if non_noop and len(non_noop) > 1:
+                # Only randomize if top actions are very close in score
+                top_score = max(a["score"] for a in non_noop)
+                close_actions = [a for a in non_noop if abs(a["score"] - top_score) < 0.1]
+                if close_actions:
+                    chosen = random.choice(close_actions)
 
         print("EVALUATED ACTIONS:", evaluated_actions)
         print("CHOSEN ACTION:", chosen)
@@ -131,18 +145,23 @@ class OperatorAgent:
         impact = self._safe_float(self.evaluator.evaluate(self.env, action)["counterfactual_impact"])
         model_score = self._model_score(observation, action)
         penalty = self._negative_history_penalty(action)
-        normalized_impact = impact * 0.5
-        action_bonus = 0.4 if action["type"] != "noop" else 0.0
-        model_weight = 0.3
-        impact_weight = 0.5
+        
+        # Improved scoring logic
+        normalized_impact = impact * 0.6  # Increased impact weight
+        action_bonus = 0.2 if action["type"] != "noop" else 0.0  # Reduced action bias
+        model_weight = 0.2  # Reduced model weight
+        impact_weight = 0.6  # Increased impact weight
+        
         score = (
             impact_weight * normalized_impact
             + model_weight * model_score
             - penalty
             + action_bonus
         )
+        
+        # Reduced noop penalty to allow it when appropriate
         if action["type"] == "noop":
-            score -= 0.2
+            score -= 0.1  # Reduced from 0.2
 
         return {
             "action": deepcopy(action),

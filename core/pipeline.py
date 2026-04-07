@@ -56,8 +56,20 @@ class EvaluationPipeline:
         score = self.grader.grade(trajectory)
 
         # 4. Extract summary metrics
+        if not trajectory:
+            return {
+                "task_id": task_id,
+                "score": 0.0,
+                "trajectory": [],
+                "summary": {
+                    "stability": 0.0,
+                    "precision": 1.0,
+                    "efficiency": 1.0,
+                    "collapsed": False
+                }
+            }
+        
         latencies = [step["info"]["latency"] for step in trajectory]
-
         stability = max(0.0, 1.0 - (sum(latencies) / len(latencies)) / 10.0)
 
         total_actions = sum(
