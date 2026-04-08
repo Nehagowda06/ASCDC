@@ -1,228 +1,190 @@
-# ASCDC: Temporal Decision Intelligence for Systems with Delayed Consequences
+# ASCDC
+Adaptive System Control & Decision Console
 
-In real systems, the hardest problem is not choosing the best action - it is deciding whether acting was necessary at all.
+A counterfactual decision engine for stabilizing distributed systems under delayed feedback, constrained actions, and non-linear dynamics.
 
-## One-Line Summary
+---
 
-A control environment that evaluates not just what actions do, but whether they were necessary.
+## Overview
 
-## Problem
+ASCDC models a stateful, multi-queue distributed system where interventions have **delayed, cascading, and sometimes irreversible effects**.
 
-Many real-world systems respond with delay. Restarting a service, scaling capacity, or throttling requests may not improve the system immediately, and sometimes the effects appear only after instability has already spread downstream.
+The system is designed to answer a harder question than standard control:
 
-This creates a timing problem:
+> Not “what action improves the system?”  
+> but “was acting necessary at all?”
 
-- agents that overreact waste budget and apply unnecessary control actions
-- agents that react too late allow queues, retries, and errors to compound
+It does this through **temporal simulation + counterfactual evaluation**, exposing decision quality under uncertainty.
 
-In delayed systems, timing is part of decision quality. Acting early, acting late, and choosing not to act can all lead to very different outcomes.
+---
 
-## What This Environment Does
+## Key Capabilities
 
-ASCDC simulates a three-stage service pipeline with queues `A -> B -> C`.
+### 1. Delayed & Multi-Step Effects
+- Actions are scheduled (not immediate)
+- Effects propagate across multiple future timesteps
+- Includes secondary consequences (retry spikes, latency impact, instability penalties)
 
-The environment includes:
+---
 
-- delayed interventions
-- budget constraints
-- action locks
-- system pressure
-- collapse conditions
+### 2. Counterfactual Decision Evaluation
+- Every action is evaluated against a **noop baseline**
+- Uses multi-step rollout with discounting
+- Measures **decision necessity**, not just outcome
 
-The agent must manage a non-linear control problem where actions affect queue growth, latency, retry amplification, and error pressure over time.
+---
 
-## Core Mechanisms
+### 3. Temporal Instability Modeling
+- System pressure (utilization + retry + error)
+- Exponential instability accumulation (irreversibility)
+- Latent drift (slow degradation without visible pressure)
+- Recovery dynamics with hysteresis
 
-### 1. Temporal Instability Accumulation
+---
 
-The system accumulates instability_score when pressure remains high.
-This creates irreversible degradation where delayed action becomes increasingly costly.
+### 4. Constraint-Aware Control
+- Budget-limited actions
+- Action locks (cooldowns per target)
+- Invalid actions rejected with penalties
+- Forces tradeoffs and planning
 
-### 2. Counterfactual Necessity Evaluation
+---
 
-Each action is evaluated against a multi-step no-op rollout.
-This determines whether intervention was actually necessary.
+### 5. Proactive + Reactive Control
+- Agents detect:
+  - visible instability (pressure spikes)
+  - latent instability (drift)
+- Supports early intervention before failure
 
-### 3. Irreversible System Degradation
+---
 
-System pressure compounds over time through exponential escalation,
-making late intervention ineffective.
+### 6. Multiple Agent Types
 
-### 4. Strategic Inaction Modeling
+- `simple-adaptive`  
+  Heuristic baseline
 
-The system explicitly models "doing nothing" as a decision:
+- `strong-decision`  
+  Rollout-based planning agent (sequence-aware)
 
-- rewarded when stable
-- penalized when instability grows
+- `simple-learning`  
+  State-aware Q-learning with temporal credit assignment
 
-## Key Innovation
+---
 
-### Counterfactual Evaluation
+### 7. Deterministic & Reproducible
 
-Every action is compared to a noop rollout from the same pre-action state.
+- Seed-controlled environment
+- Deterministic rollouts
+- Counterfactual fairness guaranteed via cloned state
+- No stochastic leakage between evaluation paths
 
-This comparison is horizon-based and evaluates outcomes over multiple future steps rather than only the immediate transition.
+---
 
-Each step produces:
+### 8. Observability & Debugging
 
-- `counterfactual_impact`
-- `was_action_necessary`
+- Full system state exposure (`/state`)
+- Structured logs:
+  - action
+  - pressure
+  - instability
+  - counterfactual impact
+  - decision rationale
+- Delayed effect visualization
+- Drift + inactivity tracking
 
-`counterfactual_impact` measures the reward difference between taking the chosen action and taking `noop` instead over a short future horizon.
+---
 
-`was_action_necessary` is `true` when the chosen non-noop action improves the outcome versus the noop rollout.
+## System Design Highlights
 
-This matters because it teaches when not to act. ASCDC evaluates intervention quality, restraint, and timing together.
+- **Time is first-class**  
+  Decisions must account for delayed consequences
 
-## Action Space
+- **Counterfactual correctness**  
+  Action vs noop comparison ensures meaningful evaluation
 
-Supported actions:
+- **No trivial policies**  
+  “Always act” and “always wait” both fail
 
-- `restart`
-- `scale`
-- `throttle`
-- `noop`
+- **Non-linear dynamics**  
+  Late actions become ineffective due to instability escalation
 
-Both payload styles are supported:
+---
 
-```json
-{
-  "action_type": "scale",
-  "target": "B",
-  "amount": 1.0
-}
-```
+## Project Structure
 
-```json
-{
-  "type": "scale",
-  "target": "B",
-  "amount": 1.0
-}
-```
+env/        → simulation environment (core dynamics)  
+core/       → agents, rollout logic, runners  
+agents/     → learning + heuristic agents  
+grader/     → evaluation logic (aligned with reward)  
+server/     → FastAPI backend  
+src/        → React frontend  
 
-For `noop`, `target` may be `null`.
+---
 
-## Observation Space
+## Running the Project
 
-Required fields:
-
-- `queues`
-- `latencies`
-- `retry_rate`
-- `error_rate`
-- `system_pressure`
-- `remaining_budget`
-- `timestep`
-- `done`
-
-Optional fields may include:
-
-- `capacities`
-- `latency`
-- `pending_actions`
-
-## Tasks
-
-### Incident Response
-
-Immediate overload centered on service `B`. This task tests fast intervention under pressure.
-
-### Capacity Planning
-
-Slow imbalance builds over time. This task tests whether the agent recognizes subtle drift before it becomes a failure.
-
-### Stability Preservation
-
-A transient spike can resolve without intervention. This task tests whether the agent can avoid unnecessary action.
-
-## Metrics
-
-- `total_reward`
-- `necessary_action_ratio`
-- `average_counterfactual_impact`
-- `positive_impact_rate`
-
-These metrics evaluate decision quality, not just system outcomes.
-
-## How to Run
-
-### Quick Setup (Hackathon)
+### Backend
 
 ```bash
-# Clone and setup
-git clone <repository-url>
-cd ascdc-openenv
-python setup.py
+cd server
+python -m venv venv
+source venv/bin/activate     # Windows: venv\Scripts\activate
 
-# Start backend
-python -m uvicorn server.app:app --reload --port 8000
-
-# Start frontend (in another terminal)
-npm run dev
-
-# Open browser
-open http://localhost:5173
-```
-
-### Manual Installation
-
-```bash
-# Install PyTorch (CPU version for Windows)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-# Install dependencies
 pip install -r requirements.txt
+uvicorn app:app --reload
+```
 
-# Start services
-python -m uvicorn server.app:app --reload --port 8000
+Backend:
+http://localhost:8000
+
+---
+
+### Frontend
+
+```bash
+cd src
+npm install
 npm run dev
 ```
 
-### Docker Setup
+Frontend:
+http://localhost:5173
+
+---
+
+### Baseline Run (optional)
 
 ```bash
-docker build -t ascdc .
-docker run -p 8000:8000 ascdc
+python run_baseline.py
 ```
 
-The API will be available at `http://localhost:8000`.
+---
 
-## API Endpoints
+## Usage
 
-- `GET /`
-  Service status message.
-- `POST /reset`
-  Reset the active environment, optionally with a task configuration.
-- `POST /step`
-  Apply one action and receive observation, reward, done, and counterfactual-aware info.
-- `GET /state`
-  Inspect internal environment state.
-- `GET /tasks`
-  List available deterministic tasks.
-- `POST /grader`
-  Score a trajectory deterministically.
-- `POST /baseline`
-  Run built-in baseline agents across all tasks.
-- `GET /health`
-  Health check endpoint.
+- **Dashboard** → system overview + recommendations  
+- **Simulation** → manual / auto control  
+- **Agents** → switch decision strategies  
+- **System Logs** → inspect decisions and counterfactuals  
 
-Example API usage:
+---
 
-```bash
-curl -X POST "http://localhost:8000/reset?task_id=T1_INCIDENT_RESPONSE"
-```
+## Evaluation Alignment
 
-```bash
-curl -X POST "http://localhost:8000/step" \
-  -H "Content-Type: application/json" \
-  -d "{\"action_type\":\"scale\",\"target\":\"B\",\"amount\":1.0}"
-```
+- Reward and grader share the same transition metrics  
+- Counterfactual rollouts use identical initial states  
+- Deterministic execution ensures reproducible scoring  
 
-```bash
-curl "http://localhost:8000/state"
-```
+---
 
-## Key Insight
+## Summary
 
-ASCDC evaluates not just outcomes, but counterfactual necessity of actions in delayed systems.
+ASCDC is not a reactive simulator.
+
+It is a **decision evaluation system** that models:
+- delayed causality
+- constrained intervention
+- temporal risk accumulation
+- and counterfactual correctness
+
+to determine when intervention is actually justified.
