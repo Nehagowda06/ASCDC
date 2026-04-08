@@ -35,3 +35,11 @@ def run():
 
 if __name__ == "__main__":
     run()
+
+import gradio as gr
+
+def app():
+    run()  # your existing function
+    return "Execution complete"
+
+gr.Interface(fn=app, inputs=[], outputs="text").launch()
