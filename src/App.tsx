@@ -1,17 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Layout } from "./components/Layout";
+import { AgentComparisonPage } from "./pages/AgentComparisonPage";
 import { BaselinesPage } from "./pages/BaselinesPage";
 import { DecisionAnalysisPage } from "./pages/DecisionAnalysisPage";
 import { DecisionDashboardPage } from "./pages/DecisionDashboardPage";
 import { DecisionSimulationPage } from "./pages/DecisionSimulationPage";
+import { SystemLogsPage } from "./pages/SystemLogsPage";
+import type { TimelinePoint } from "./components/decision/Timeline";
 import { computeDecisionMetrics, formatActionLabel, getSystemStatus } from "./lib/decision";
 import {
   fetchTasks,
   getState,
+  getAutoStatus,
+  getSystemLogs,
   recommend as fetchRecommendation,
   reset,
+  startAutoRunner,
   step,
+  stopAutoRunner,
   getAgents,
   switchAgent,
   getSimpleMetrics,
@@ -19,14 +26,16 @@ import {
 } from "./lib/api";
 import {
   EMPTY_STATE,
+  type AutoRunnerStatus,
   type AgentAction,
   type EnvironmentState,
   type RecommendationResponse,
+  type SystemLogEntry,
   type TaskMap,
   type TrajectoryStep,
 } from "./lib/types";
 
-export type PageId = "dashboard" | "simulation" | "analysis" | "baselines" | "agents";
+export type PageId = "dashboard" | "simulation" | "analysis" | "baselines" | "comparison" | "agents" | "logs";
 
 const DEFAULT_PAGE: PageId = "dashboard";
 const PAGE_STORAGE_KEY = "ascdc-active-page";
@@ -37,10 +46,11 @@ const navigationItems: Array<{ id: PageId; label: string }> = [
   { id: "analysis", label: "Analysis" },
   { id: "baselines", label: "Baselines" },
   { id: "agents", label: "Agents" },
+  { id: "logs", label: "System Logs" },
 ];
 
 function isPageId(value: string | null | undefined): value is PageId {
-  return navigationItems.some((item) => item.id === value);
+  return value === "comparison" || navigationItems.some((item) => item.id === value);
 }
 
 function getPageFromHash(hash: string) {
@@ -103,6 +113,38 @@ function formatLoadError(label: string, error: unknown) {
   return `${label}: ${detail}`;
 }
 
+function buildTimelinePoint(
+  state: Partial<EnvironmentState>,
+  actionLabel = "AUTO",
+  delayedEffects = "",
+): TimelinePoint {
+  return {
+    step: state.timestep ?? 0,
+    queueA: Number(state.queues?.A ?? 0),
+    queueB: Number(state.queues?.B ?? 0),
+    queueC: Number(state.queues?.C ?? 0),
+    action: actionLabel,
+    delayedEffects,
+  };
+}
+
+function appendTimelinePoint(
+  current: TimelinePoint[],
+  point: TimelinePoint,
+  limit = 100,
+): TimelinePoint[] {
+  if (current.length === 0) {
+    return [point];
+  }
+
+  const lastPoint = current[current.length - 1];
+  if (lastPoint.step === point.step) {
+    return [...current.slice(0, -1), point];
+  }
+
+  return [...current.slice(-(limit - 1)), point];
+}
+
 export default function App() {
   const [activePage, setActivePage] = useState<PageId>(getInitialPage);
   const [systemState, setSystemState] = useState<EnvironmentState>(EMPTY_STATE);
@@ -114,6 +156,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<{ available: string[]; current: string }>({ available: [], current: "unknown" });
   const [simpleMetrics, setSimpleMetrics] = useState<any>({});
+  const [autoStatus, setAutoStatus] = useState<AutoRunnerStatus>({ running: false });
+  const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [timelinePoints, setTimelinePoints] = useState<TimelinePoint[]>([
+    buildTimelinePoint(EMPTY_STATE, "START", ""),
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -161,6 +210,9 @@ export default function App() {
 
       if (nextStateResult.status === "fulfilled") {
         setSystemState(nextStateResult.value);
+        setTimelinePoints([
+          buildTimelinePoint(nextStateResult.value, "START", ""),
+        ]);
       } else {
         failures.push(formatLoadError("State", nextStateResult.reason));
       }
@@ -191,13 +243,16 @@ export default function App() {
       }
 
       try {
-        const nextRecommendation =
+        const [nextRecommendation, nextAutoStatus] = await Promise.all([
           nextStateResult.status === "fulfilled"
-            ? await fetchRecommendation(nextStateResult.value)
-            : await fetchRecommendation();
+            ? fetchRecommendation(nextStateResult.value)
+            : fetchRecommendation(),
+          getAutoStatus(),
+        ]);
 
         if (!cancelled) {
           setRecommendation(nextRecommendation);
+          setAutoStatus(nextAutoStatus);
         }
       } catch (nextError) {
         if (!cancelled) {
@@ -241,9 +296,162 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!autoStatus.running) {
+      return;
+    }
+
+    async function refreshAutoState() {
+      try {
+        const [nextStatus, nextMetrics] = await Promise.all([
+          getAutoStatus(),
+          getSimpleMetrics(),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setAutoStatus(nextStatus);
+        if (nextStatus.state) {
+          setSystemState(nextStatus.state);
+          try {
+            const nextRecommendation = await fetchRecommendation(nextStatus.state);
+            if (!cancelled) {
+              setRecommendation(nextRecommendation);
+            }
+          } catch (nextError) {
+            if (!cancelled) {
+              setRecommendation(null);
+            }
+          }
+        }
+        setSimpleMetrics(nextMetrics);
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(nextError instanceof Error ? nextError.message : "Unable to refresh auto mode.");
+          setAutoStatus((current) => ({ ...current, running: false }));
+        }
+      }
+    }
+
+    void refreshAutoState();
+    const timer = window.setInterval(() => {
+      void refreshAutoState();
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [autoStatus.running]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!autoStatus.running) {
+      return;
+    }
+
+    async function refreshAutoTimeline() {
+      try {
+        const nextState = await getState();
+        if (cancelled) {
+          return;
+        }
+
+        setSystemState(nextState);
+        setTimelinePoints((current) =>
+          appendTimelinePoint(
+            current,
+            buildTimelinePoint(
+              nextState,
+              autoStatus.last_action ? formatActionLabel(autoStatus.last_action) : "AUTO",
+              (nextState.pending_actions ?? [])
+                .map((item) => `${item.type.toUpperCase()} ${item.target ?? "System"} @ ${item.applies_at}`)
+                .join(" | "),
+            ),
+          ),
+        );
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(nextError instanceof Error ? nextError.message : "Unable to refresh auto timeline.");
+        }
+      }
+    }
+
+    void refreshAutoTimeline();
+    const interval = window.setInterval(() => {
+      void refreshAutoTimeline();
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [autoStatus.running, autoStatus.last_action]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (activePage !== "logs") {
+      return;
+    }
+
+    async function refreshLogs() {
+      setLogsLoading(true);
+      try {
+        const nextLogs = await getSystemLogs();
+        if (!cancelled) {
+          setSystemLogs(nextLogs);
+          setLogsError(null);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setLogsError(nextError instanceof Error ? nextError.message : "Unable to load logs.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLogsLoading(false);
+        }
+      }
+    }
+
+    void refreshLogs();
+    const timer = window.setInterval(() => {
+      void refreshLogs();
+    }, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activePage]);
+
   async function refreshRecommendation(snapshot?: Partial<EnvironmentState>) {
-    const nextRecommendation = await fetchRecommendation(snapshot ?? systemState);
-    setRecommendation(nextRecommendation);
+    setLoading(true);
+    try {
+      const nextState = snapshot ? { ...systemState, ...snapshot } : await getState();
+      const [nextRecommendation, nextMetrics, nextAgents, nextAutoStatus] = await Promise.all([
+        fetchRecommendation(nextState),
+        getSimpleMetrics(),
+        getAgents(),
+        getAutoStatus(),
+      ]);
+
+      setSystemState(nextState);
+      setRecommendation(nextRecommendation);
+      setSimpleMetrics(nextMetrics);
+      setAgents(nextAgents);
+      setAutoStatus(nextAutoStatus);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to refresh analysis.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleReset(taskId?: string) {
@@ -257,6 +465,9 @@ export default function App() {
       ]);
 
       setSystemState(nextState);
+      setTimelinePoints([
+        buildTimelinePoint(nextState, "START", ""),
+      ]);
       setRecommendation(nextRecommendation);
       setSimpleMetrics(nextMetrics);
       setTrajectory([]);
@@ -269,7 +480,7 @@ export default function App() {
     }
   }
 
-  async function handleStep(action: AgentAction) {
+  async function applyAction(action: AgentAction) {
     setLoading(true);
     try {
       const previousObservation = snapshotObservation(systemState);
@@ -294,6 +505,18 @@ export default function App() {
         },
       ]);
       setSystemState({ ...nextState });
+      setTimelinePoints((current) =>
+        appendTimelinePoint(
+          current,
+          buildTimelinePoint(
+            nextState,
+            formatActionLabel(normalizedAction),
+            (response.observation.pending_actions ?? [])
+              .map((item) => `${item.type.toUpperCase()} ${item.target ?? "System"} @ ${item.applies_at}`)
+              .join(" | "),
+          ),
+        ),
+      );
       setRecommendation({ ...nextRecommendation });
       setSimpleMetrics(nextMetrics);
       setError(null);
@@ -304,44 +527,16 @@ export default function App() {
     }
   }
 
+  async function handleStep(action: AgentAction) {
+    await applyAction(action);
+  }
+
   async function handleUseRecommendation() {
     if (!recommendation) {
       return;
     }
 
-    setLoading(true);
-    try {
-      const previousObservation = snapshotObservation(systemState);
-      const recommendedAction = normalizeStepAction(recommendation.action);
-
-      const response = await step(recommendedAction);
-      const [newState, newRecommendation, newMetrics] = await Promise.all([
-        getState(),
-        fetchRecommendation(),
-        getSimpleMetrics()
-      ]);
-
-      setTrajectory((current) => [
-        ...current,
-        {
-          timestep: response.observation.timestep ?? current.length + 1,
-          observation: previousObservation,
-          action: recommendedAction,
-          reward: response.reward,
-          next_observation: response.observation,
-          done: response.done,
-          info: response.info,
-        },
-      ]);
-      setSystemState({ ...newState });
-      setRecommendation({ ...newRecommendation });
-      setSimpleMetrics(newMetrics);
-      setError(null);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Error applying recommendation.");
-    } finally {
-      setLoading(false);
-    }
+    await applyAction(recommendation.action);
   }
 
   async function handleSwitchAgent(agentName: string) {
@@ -381,46 +576,72 @@ export default function App() {
 
   const metrics = useMemo(() => computeDecisionMetrics(trajectory), [trajectory]);
 
-  const timeline = useMemo(() => {
-    if (trajectory.length === 0) {
-      return [
-        {
-          step: systemState.timestep ?? 0,
-          queueA: Number(systemState.queues.A ?? 0),
-          queueB: Number(systemState.queues.B ?? 0),
-          queueC: Number(systemState.queues.C ?? 0),
-          action: "START",
-          delayedEffects: "",
-        },
-      ];
+  async function handleStartAuto() {
+    setLoading(true);
+    try {
+      const nextStatus = await startAutoRunner({
+        interval: 0.5,
+        task_id: selectedTask,
+      });
+      setAutoStatus(nextStatus);
+      const nextAutoState = nextStatus.state;
+      if (nextAutoState) {
+        setSystemState(nextAutoState);
+        setTimelinePoints([
+          buildTimelinePoint(nextAutoState, "AUTO START", ""),
+        ]);
+      }
+      setTrajectory([]);
+      const [nextRecommendation, nextMetrics] = await Promise.all([
+        nextAutoState ? fetchRecommendation(nextAutoState) : fetchRecommendation(),
+        getSimpleMetrics(),
+      ]);
+      setRecommendation(nextRecommendation);
+      setSimpleMetrics(nextMetrics);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to start auto mode.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    const firstObservation = trajectory[0].observation;
-    return [
-      {
-        step: firstObservation.timestep ?? 0,
-        queueA: Number(firstObservation.queues.A ?? 0),
-        queueB: Number(firstObservation.queues.B ?? 0),
-        queueC: Number(firstObservation.queues.C ?? 0),
-        action: "START",
-        delayedEffects: "",
-      },
-      ...trajectory.map((stepItem) => {
-        const delayedEffects = (stepItem.next_observation.pending_actions ?? [])
-          .map((item) => `${item.type.toUpperCase()} ${item.target ?? "System"} @ ${item.applies_at}`)
-          .join(" | ");
+  async function handleStopAuto() {
+    setLoading(true);
+    try {
+      const nextStatus = await stopAutoRunner();
+      setAutoStatus(nextStatus);
+      const nextAutoState = nextStatus.state;
+      if (nextAutoState) {
+        setSystemState(nextAutoState);
+        setTimelinePoints((current) =>
+          appendTimelinePoint(
+            current,
+            buildTimelinePoint(
+              nextAutoState,
+              "AUTO STOP",
+              (nextAutoState.pending_actions ?? [])
+                .map((item) => `${item.type.toUpperCase()} ${item.target ?? "System"} @ ${item.applies_at}`)
+                .join(" | "),
+            ),
+          ),
+        );
+      }
+      const [nextRecommendation, nextMetrics] = await Promise.all([
+        nextAutoState ? fetchRecommendation(nextAutoState) : fetchRecommendation(),
+        getSimpleMetrics(),
+      ]);
+      setRecommendation(nextRecommendation);
+      setSimpleMetrics(nextMetrics);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to stop auto mode.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-        return {
-          step: stepItem.timestep,
-          queueA: Number(stepItem.observation.queues.A ?? 0),
-          queueB: Number(stepItem.observation.queues.B ?? 0),
-          queueC: Number(stepItem.observation.queues.C ?? 0),
-          action: formatActionLabel(stepItem.action),
-          delayedEffects,
-        };
-      }),
-    ];
-  }, [systemState, trajectory]);
+  const timeline = useMemo(() => timelinePoints, [timelinePoints]);
 
   // Convert simpleMetrics to DecisionMetrics format
   const dashboardMetrics = useMemo(() => ({
@@ -434,7 +655,7 @@ export default function App() {
 
   return (
     <Layout
-      activePage={activePage}
+      activePage={activePage === "comparison" ? "baselines" : activePage}
       items={navigationItems}
       onNavigate={setActivePage}
       statusLabel={status.label}
@@ -443,7 +664,7 @@ export default function App() {
       timestep={systemState.timestep ?? 0}
     >
       {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">
+        <div className="rounded-xl border border-red-900/40 bg-red-500/10 px-4 py-3 text-sm text-red-300 shadow-sm">
           {error}
         </div>
       ) : null}
@@ -465,10 +686,13 @@ export default function App() {
           tasks={tasks}
           selectedTask={selectedTask}
           loading={loading}
+          autoStatus={autoStatus}
           recommendation={recommendation}
           onReset={handleReset}
           onManualStep={handleStep}
           onApplyRecommendation={handleUseRecommendation}
+          onStartAuto={handleStartAuto}
+          onStopAuto={handleStopAuto}
         />
       )}
 
@@ -481,7 +705,11 @@ export default function App() {
       )}
 
       {activePage === "baselines" && (
-        <BaselinesPage />
+        <BaselinesPage onOpenComparison={() => setActivePage("comparison")} />
+      )}
+
+      {activePage === "comparison" && (
+        <AgentComparisonPage onBackToTable={() => setActivePage("baselines")} />
       )}
 
       {activePage === "agents" && (
@@ -491,6 +719,14 @@ export default function App() {
           onResetMetrics={handleResetMetrics}
           loading={loading}
           simpleMetrics={simpleMetrics}
+        />
+      )}
+
+      {activePage === "logs" && (
+        <SystemLogsPage
+          logs={systemLogs}
+          loading={logsLoading}
+          error={logsError}
         />
       )}
     </Layout>
@@ -510,46 +746,96 @@ function AgentsPage({
   loading: boolean;
   simpleMetrics: any;
 }) {
+  const agentDetails: Record<string, string[]> = {
+    "simple-adaptive": [
+      "Balances action and restraint based on current pressure and queue ratios.",
+      "Prioritizes the most stressed queue before spreading interventions.",
+      "Escalates from scale to restart only when pressure becomes clearly critical.",
+    ],
+    "simple-conservative": [
+      "Waits longer before acting and intervenes mainly during high-pressure states.",
+      "Prefers fewer actions to preserve budget and avoid unnecessary disruption.",
+      "Best suited for stable periods where overreaction is more costly than delay.",
+    ],
+    "simple-aggressive": [
+      "Responds early to imbalances and treats moderate drift as worth correcting.",
+      "Prefers fast intervention to prevent delayed instability from compounding.",
+      "Useful when small warning signs tend to turn into larger incidents quickly.",
+    ],
+    "simple-learning": [
+      "Learns from previous rewards and updates a compact state-action value table.",
+      "Uses the current pressure and bottleneck queue to pick previously rewarding actions.",
+      "Improves over time as it collects more experience from live simulation steps.",
+    ],
+    "strong-decision": [
+      "Simulates short rollout sequences before choosing the first action to take.",
+      "Compares likely near-term outcomes instead of relying only on static thresholds.",
+      "Favors stronger intervention under high pressure and avoids overreacting in calm states.",
+    ],
+  };
+
+  const currentAgentDetails =
+    agentDetails[agents.current] ?? [
+      "Uses the shared environment evaluation loop to choose the next action.",
+      "Participates in the same metrics and counterfactual analysis as other agents.",
+      "Can be compared directly against the built-in strategies from this page.",
+    ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 px-6 py-6 text-gray-900">
-      <div className="mx-auto max-w-7xl space-y-8">
+    <div className="px-1 py-1 text-gray-100">
+      <div className="mx-auto max-w-7xl space-y-4">
         <div className="space-y-2">
-          <div className="inline-flex items-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-gray-500 shadow-sm">
-            Agent Management
-          </div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-gray-900">AI Agent Control</h1>
-            <p className="max-w-3xl text-sm leading-6 text-gray-600">
+            <h1>AI Agent Control</h1>
+            <p className="max-w-3xl text-sm leading-6 text-gray-400">
               Switch between different AI agents to test their behavior and performance.
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg font-medium text-gray-900">Current Agent</h3>
-              <div className="mt-2">
-                <p className="text-2xl font-bold text-blue-600">{agents.current}</p>
-                <p className="text-sm text-gray-500">Active agent</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="overflow-hidden rounded-xl border border-[#242934] bg-[#14181f] shadow-sm">
+            <div className="p-4">
+              <h3 className="text-lg font-medium text-white">Current Agent</h3>
+              <div className="mt-2 space-y-4">
+                <p className="text-xl font-semibold text-[#C38EB4]">{agents.current}</p>
+                <p className="text-sm leading-6 text-gray-400">Active agent</p>
+                <div className="rounded-xl border border-[#2a3039] bg-[#171c24] px-4 py-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Agent Details
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    {currentAgentDetails.map((detail) => (
+                      <div key={detail} className="flex items-start gap-3">
+                        <span className="mt-1 h-2 w-2 rounded-full bg-[#C38EB4]" />
+                        <p className="text-sm leading-6 text-gray-300">{detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="px-4 py-5 sm:p-6">
-              <h3 className="text-lg font-medium text-gray-900">Available Agents</h3>
+          <div className="overflow-hidden rounded-xl border border-[#242934] bg-[#14181f] shadow-sm">
+            <div className="p-4">
+              <h3 className="text-lg font-medium text-white">Available Agents</h3>
               <div className="mt-2 space-y-2">
                 {agents.available.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-gray-200 p-4 text-sm text-gray-500">
+                  <div className="rounded-lg border border-dashed border-[#2a3039] bg-[#171c24] p-4 text-sm text-gray-400">
                     No agents are available yet.
                   </div>
                 ) : agents.available.map((agentName) => (
-                  <div key={agentName} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                  <div
+                    key={agentName}
+                    className="flex items-center justify-between rounded-lg border border-[#2a3039] bg-[#171c24] p-3 transition-colors hover:border-[#39404c]"
+                  >
                     <div>
-                      <p className="font-medium text-gray-900">{agentName}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-medium text-white">{agentName}</p>
+                      <p className="text-sm text-gray-400">
                         {agentName.includes("adaptive") && "Adaptive strategy - responds to current conditions"}
+                        {agentName.includes("strong") && "Strong decision strategy - evaluates rollout outcomes before acting"}
+                        {agentName.includes("learning") && "Learning strategy - repeats historically rewarding actions"}
                         {agentName.includes("conservative") && "Conservative strategy - acts only in emergencies"}
                         {agentName.includes("aggressive") && "Aggressive strategy - acts on any imbalance"}
                       </p>
@@ -557,10 +843,10 @@ function AgentsPage({
                     <button
                       onClick={() => onSwitchAgent(agentName)}
                       disabled={loading || agentName === agents.current}
-                      className={`inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                      className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition-colors ${
                         agentName === agents.current
-                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                          : "text-white bg-blue-600 hover:bg-blue-700 focus:ring-blue-500"
+                          ? "cursor-not-allowed border-[#2b313b] bg-[#202631] text-gray-500"
+                          : "border-[#C38EB4] bg-[#C38EB4] text-white hover:border-[#b47fa5] hover:bg-[#b47fa5]"
                       }`}
                     >
                       {agentName === agents.current ? "Active" : "Switch"}
@@ -572,36 +858,36 @@ function AgentsPage({
           </div>
         </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium text-gray-900">Performance Metrics</h3>
+        <div className="overflow-hidden rounded-xl border border-[#242934] bg-[#14181f] shadow-sm">
+          <div className="p-4">
+            <h3 className="text-lg font-medium text-white">Performance Metrics</h3>
             <div className="mt-2 grid grid-cols-2 gap-4 xl:grid-cols-5">
               <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">{simpleMetrics.total_reward || 0}</p>
-                <p className="text-sm text-gray-500">Total Reward</p>
+                <p className="text-xl font-semibold text-[#C38EB4]">{simpleMetrics.total_reward || 0}</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Total Reward</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">{Math.round((simpleMetrics.necessary_action_ratio || 0) * 100)}%</p>
-                <p className="text-sm text-gray-500">Necessary Action Ratio</p>
+                <p className="text-xl font-semibold text-green-600">{Math.round((simpleMetrics.necessary_action_ratio || 0) * 100)}%</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Necessary Action Ratio</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-purple-600">{Math.round((simpleMetrics.positive_impact_rate || 0) * 100)}%</p>
-                <p className="text-sm text-gray-500">Positive Impact Rate</p>
+                <p className="text-xl font-semibold text-purple-600">{Math.round((simpleMetrics.positive_impact_rate || 0) * 100)}%</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Positive Impact Rate</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-cyan-600">{simpleMetrics.average_impact || 0}</p>
-                <p className="text-sm text-gray-500">Avg Impact</p>
+                <p className="text-xl font-semibold text-cyan-600">{simpleMetrics.average_impact || 0}</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Avg Impact</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">{simpleMetrics.total_actions || 0}</p>
-                <p className="text-sm text-gray-500">Total Actions</p>
+                <p className="text-xl font-semibold text-[#C38EB4]">{simpleMetrics.total_actions || 0}</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">Total Actions</p>
               </div>
             </div>
             <div className="mt-4">
               <button
                 onClick={() => void onResetMetrics()}
                 disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                className="flex w-full justify-center rounded-lg border border-red-600 bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:border-red-700 hover:bg-red-700"
               >
                 {loading ? "Resetting..." : "Reset Metrics"}
               </button>

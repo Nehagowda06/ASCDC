@@ -1,5 +1,7 @@
 # ASCDC: Temporal Decision Intelligence for Systems with Delayed Consequences
 
+In real systems, the hardest problem is not choosing the best action - it is deciding whether acting was necessary at all.
+
 ## One-Line Summary
 
 A control environment that evaluates not just what actions do, but whether they were necessary.
@@ -28,6 +30,30 @@ The environment includes:
 - collapse conditions
 
 The agent must manage a non-linear control problem where actions affect queue growth, latency, retry amplification, and error pressure over time.
+
+## Core Mechanisms
+
+### 1. Temporal Instability Accumulation
+
+The system accumulates instability_score when pressure remains high.
+This creates irreversible degradation where delayed action becomes increasingly costly.
+
+### 2. Counterfactual Necessity Evaluation
+
+Each action is evaluated against a multi-step no-op rollout.
+This determines whether intervention was actually necessary.
+
+### 3. Irreversible System Degradation
+
+System pressure compounds over time through exponential escalation,
+making late intervention ineffective.
+
+### 4. Strategic Inaction Modeling
+
+The system explicitly models "doing nothing" as a decision:
+
+- rewarded when stable
+- penalized when instability grows
 
 ## Key Innovation
 

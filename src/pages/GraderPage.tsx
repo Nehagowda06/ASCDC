@@ -12,69 +12,166 @@ import type { TrajectoryStep } from "../lib/types";
 type Breakdown = {
   stability: number;
   precision: number;
-  efficiency: number;
+  smoothness: number;
   collapsed: boolean;
   steps: number;
 };
+
+const MAX_LATENCY = 10;
+const CRITICAL_PRESSURE = 3;
+const PRESSURE_INCREASE_THRESHOLD = 0.12;
+const SMALL_PRESSURE_THRESHOLD = 0.05;
+const STABILIZATION_HORIZON = 3;
+
+function clamp(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getPressure(step: TrajectoryStep, index: number, trajectory: TrajectoryStep[]): number {
+  const nextPressure = Number(
+    step.next_observation?.system_pressure
+      ?? step.info.system_pressure
+      ?? (step.info as Record<string, unknown>).pressure
+      ?? NaN,
+  );
+
+  if (Number.isFinite(nextPressure)) {
+    return nextPressure;
+  }
+
+  const observationPressure = Number(
+    step.observation?.system_pressure
+      ?? (step.observation as Record<string, unknown>)?.pressure
+      ?? NaN,
+  );
+
+  if (Number.isFinite(observationPressure)) {
+    return observationPressure;
+  }
+
+  return index > 0 ? getPressure(trajectory[index - 1], index - 1, trajectory) : 0;
+}
+
+function getPressureDelta(step: TrajectoryStep, index: number, trajectory: TrajectoryStep[]): number {
+  const beforePressure = Number(
+    step.observation?.system_pressure
+      ?? (step.observation as Record<string, unknown>)?.pressure
+      ?? NaN,
+  );
+  const afterPressure = getPressure(step, index, trajectory);
+
+  if (Number.isFinite(beforePressure)) {
+    return afterPressure - beforePressure;
+  }
+
+  if (index === 0) {
+    return 0;
+  }
+
+  return afterPressure - getPressure(trajectory[index - 1], index - 1, trajectory);
+}
 
 function buildBreakdown(trajectory: TrajectoryStep[]): Breakdown {
   if (trajectory.length === 0) {
     return {
       stability: 0,
       precision: 0,
-      efficiency: 0,
+      smoothness: 0,
       collapsed: false,
       steps: 0,
     };
   }
 
   const latencies = trajectory.map((step) => Number(step.info.latency ?? 0));
+  const pressures = trajectory.map((step, index) => getPressure(step, index, trajectory));
+  const pressureDeltas = trajectory.map((step, index) => getPressureDelta(step, index, trajectory));
   const avgLatency = latencies.reduce((total, value) => total + value, 0) / trajectory.length;
-  const stability = Math.max(0, 1 - avgLatency / 10);
+  const avgPressure = pressures.reduce((total, value) => total + value, 0) / trajectory.length;
+  const latencyScore = clamp(1 - avgLatency / MAX_LATENCY);
+  const pressureScore = clamp(1 - avgPressure / CRITICAL_PRESSURE);
+  const stability = clamp(0.55 * latencyScore + 0.45 * pressureScore);
 
   let totalActions = 0;
-  let overreactions = 0;
-  let successfulActions = 0;
+  let actionableMoments = 0;
+  let missedInterventions = 0;
+  let unnecessaryActions = 0;
+  let timelyActions = 0;
 
-  trajectory.forEach((step) => {
-    if (step.action.type === "noop") {
+  trajectory.forEach((step, index) => {
+    const actionType = step.action.type ?? "noop";
+    const pressureDelta = pressureDeltas[index];
+
+    if (pressureDelta > PRESSURE_INCREASE_THRESHOLD) {
+      actionableMoments += 1;
+      if (actionType === "noop") {
+        missedInterventions += 1;
+      }
+    }
+
+    if (actionType === "noop") {
       return;
     }
 
     totalActions += 1;
 
-    const pressureDelta = Number(step.info.pressure_delta ?? 0);
-    const systemPressure = Number(step.info.system_pressure ?? 0);
-
-    if (pressureDelta <= 0 && systemPressure < 0.8) {
-      overreactions += 1;
+    if (pressureDelta < SMALL_PRESSURE_THRESHOLD) {
+      unnecessaryActions += 1;
     }
 
-    const scheduledTimestep = step.info.scheduled_timestep;
-    if (scheduledTimestep === undefined) {
-      return;
-    }
+    const currentPressure = pressures[index];
+    const futureWindow = pressures.slice(index + 1, index + 1 + STABILIZATION_HORIZON);
+    const stabilizesEarly = futureWindow.some(
+      (futurePressure) => futurePressure < currentPressure - SMALL_PRESSURE_THRESHOLD,
+    );
 
-    const futureStep = trajectory.find((candidate) => candidate.timestep === scheduledTimestep);
-    if (futureStep && Number(futureStep.info.system_pressure ?? 0) < systemPressure) {
-      successfulActions += 1;
+    if (stabilizesEarly) {
+      timelyActions += 1;
     }
   });
 
-  const precision =
-    totalActions === 0
-      ? 1
-      : Math.max(0, successfulActions / totalActions * (1 - overreactions / totalActions));
+  const missedPenalty = actionableMoments > 0 ? missedInterventions / actionableMoments : 0;
+  const unnecessaryPenalty = totalActions > 0 ? unnecessaryActions / totalActions : 0;
+  const timelyReward = totalActions > 0 ? timelyActions / totalActions : 0.5;
+  const precision = clamp(0.35 + 0.45 * timelyReward - 0.35 * missedPenalty - 0.25 * unnecessaryPenalty);
 
-  const initialBudget = Number(trajectory[0]?.info.remaining_budget ?? 0);
-  const finalBudget = Number(trajectory[trajectory.length - 1]?.info.remaining_budget ?? 0);
-  const efficiency =
-    initialBudget > 0 ? Math.max(0, Math.min(1, finalBudget / initialBudget)) : 0;
+  const significantSigns = pressureDeltas
+    .filter((delta) => Math.abs(delta) >= SMALL_PRESSURE_THRESHOLD)
+    .map((delta) => (delta > 0 ? 1 : -1));
+  let signFlips = 0;
+  for (let index = 1; index < significantSigns.length; index += 1) {
+    if (significantSigns[index] !== significantSigns[index - 1]) {
+      signFlips += 1;
+    }
+  }
+  const pressureOscillationPenalty = significantSigns.length > 1
+    ? signFlips / Math.max(1, significantSigns.length - 1)
+    : 0;
+
+  const nonNoopActions = trajectory
+    .map((step) => {
+      const actionType = step.action.type ?? "noop";
+      if (actionType === "noop") {
+        return null;
+      }
+      const target = step.action.target ?? "";
+      return `${String(actionType).toUpperCase()} ${target}`.trim();
+    })
+    .filter((value): value is string => value !== null);
+  let actionFlips = 0;
+  for (let index = 1; index < nonNoopActions.length; index += 1) {
+    if (nonNoopActions[index] !== nonNoopActions[index - 1]) {
+      actionFlips += 1;
+    }
+  }
+  const actionOscillationPenalty = nonNoopActions.length > 1
+    ? actionFlips / Math.max(1, nonNoopActions.length - 1)
+    : 0;
+  const smoothness = clamp(1 - (0.75 * pressureOscillationPenalty + 0.25 * actionOscillationPenalty));
 
   return {
     stability,
     precision,
-    efficiency,
+    smoothness,
     collapsed: trajectory.some((step) => Boolean(step.info.failure_flags?.collapsed)),
     steps: trajectory.length,
   };
@@ -86,7 +183,7 @@ export function GraderPage() {
   const [breakdown, setBreakdown] = useState<Breakdown>({
     stability: 0,
     precision: 0,
-    efficiency: 0,
+    smoothness: 0,
     collapsed: false,
     steps: 0,
   });
@@ -152,12 +249,12 @@ export function GraderPage() {
           <MetricBox
             label="Precision"
             value={formatNumber(breakdown.precision, 4)}
-            hint="Action discipline"
+            hint="Timing quality"
           />
           <MetricBox
-            label="Efficiency"
-            value={formatNumber(breakdown.efficiency, 4)}
-            hint={breakdown.collapsed ? "Collapsed" : "No collapse"}
+            label="Smoothness"
+            value={formatNumber(breakdown.smoothness, 4)}
+            hint={breakdown.collapsed ? "Collapsed" : "Low oscillation"}
           />
         </div>
       </Section>

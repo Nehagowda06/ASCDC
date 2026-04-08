@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from pprint import pformat
+
 from core.counterfactual import compute_counterfactual_metrics
+from core.pipeline import ThresholdAgent
 from core.runner import TaskRunner
 from env.environment import ASCDCEnvironment
-from core.pipeline import ThresholdAgent
 from tasks.definitions import TASKS
 
 
 def main() -> None:
     task_id = "T1_INCIDENT_RESPONSE"
-    task_config = TASKS[task_id]["config"]
+    task_config = deepcopy(TASKS[task_id]["config"])
     seed = int(task_config.get("seed", 42))
+    task_config["seed"] = seed
 
     env = ASCDCEnvironment(seed=seed)
     agent = ThresholdAgent()
@@ -25,14 +29,19 @@ def main() -> None:
 
     print("ASCDC Baseline Evaluation")
     print(f"task_id: {task_id}")
-    print(f"total_reward: {total_reward:.4f}")
-    print(f"average_reward: {average_reward:.4f}")
-    print(f"necessary_action_ratio: {metrics['necessary_action_ratio'] * 100:.2f}%")
-    print(f"average_counterfactual_impact: {metrics['average_impact']:.6f}")
-    print(f"positive_impact_rate: {metrics['positive_impact_rate'] * 100:.2f}%")
-    print(f"done: {done}")
-    print("final_state:")
-    print(final_state.model_dump())
+    print(f"seed: {seed}")
+    print(f"steps: {len(trajectory)}")
+    print()
+    print("Final Scores")
+    print(f"  total_reward: {total_reward:.4f}")
+    print(f"  average_reward: {average_reward:.4f}")
+    print(f"  necessary_action_ratio: {metrics['necessary_action_ratio'] * 100:.2f}%")
+    print(f"  average_counterfactual_impact: {metrics['average_impact']:.6f}")
+    print(f"  positive_impact_rate: {metrics['positive_impact_rate'] * 100:.2f}%")
+    print(f"  done: {done}")
+    print()
+    print("Final State")
+    print(pformat(final_state, sort_dicts=True))
 
 
 if __name__ == "__main__":

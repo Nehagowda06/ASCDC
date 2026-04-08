@@ -10,24 +10,19 @@ type SidebarProps = {
 export function Sidebar({ activePage, items, onNavigate }: SidebarProps) {
   return (
     <>
-      <aside className="fixed inset-x-0 top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur md:inset-y-0 md:left-0 md:w-[240px] md:border-b-0 md:border-r">
+      <aside className="fixed inset-x-0 top-0 z-20 border-b border-[#20252c] bg-[#111317]/95 backdrop-blur md:inset-y-0 md:left-0 md:w-[248px] md:border-b-0 md:border-r">
         <div className="flex h-full flex-col">
-          <div className="border-b border-gray-200 p-6">
-            <p className="text-lg font-semibold text-gray-900">ASCDC</p>
-            <p className="mt-1 text-sm text-gray-500">Decision intelligence dashboard</p>
-          </div>
-
-          <nav className="flex gap-2 overflow-x-auto p-4 md:flex-1 md:flex-col md:overflow-visible md:p-6">
+          <nav className="flex gap-2 overflow-x-auto p-3 md:flex-1 md:flex-col md:overflow-visible md:p-5">
             {items.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => onNavigate(item.id)}
                 className={cn(
-                  "rounded-2xl border p-4 text-left text-sm font-medium shadow-sm transition-all duration-200",
+                  "rounded-xl border px-4 py-2.5 text-left text-[13px] font-medium transition-colors duration-150",
                   activePage === item.id
-                    ? "border-blue-500 bg-blue-50 text-blue-600"
-                    : "border-white/60 bg-white text-gray-600 hover:border-gray-200 hover:text-gray-900",
+                    ? "border-[#2e3640] bg-[#1a1f26] text-white"
+                    : "border-transparent bg-transparent text-gray-300 hover:border-[#232933] hover:bg-[#171b21] hover:text-white",
                 )}
               >
                 {item.label}

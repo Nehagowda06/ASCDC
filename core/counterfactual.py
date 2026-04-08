@@ -4,15 +4,28 @@ from copy import deepcopy
 import math
 from typing import Any, Dict, Iterable, Mapping
 
+from env.environment import COUNTERFACTUAL_HORIZON
+
 
 class CounterfactualEvaluator:
-    def __init__(self, horizon: int = 5) -> None:
-        self.horizon = max(3, min(5, int(horizon)))
+    def __init__(self) -> None:
+        self.horizon = COUNTERFACTUAL_HORIZON
         self.min_significant_impact = 0.75
         self.min_positive_impact = 0.4
         self.relative_impact_floor = 0.12
 
     def evaluate(self, env: Any, action: Any) -> Dict[str, Any]:
+        # Guard against nested counterfactuals
+        if getattr(env, "_cf_active", False):
+            return {
+                "counterfactual_impact": 0.0,
+                "counterfactual_ratio": 0.0,
+                "action_rollout_reward": 0.0,
+                "noop_rollout_reward": 0.0,
+                "had_meaningful_impact": False,
+                "was_action_necessary": False,
+            }
+
         action_outcome = self._simulate(env, action)
         noop_outcome = self._simulate(env, {"type": "noop", "target": None})
         impact = self._safe_float(action_outcome - noop_outcome)
@@ -30,11 +43,16 @@ class CounterfactualEvaluator:
 
     def _simulate(self, env: Any, initial_action: Any) -> float:
         simulated_env = deepcopy(env)
+        if hasattr(env, "rng") and hasattr(simulated_env, "rng"):
+            simulated_env.rng.setstate(env.rng.getstate())
         total_reward = 0.0
         action = deepcopy(initial_action)
 
         for step_index in range(self.horizon):
-            _, reward, done, _ = simulated_env.step(action)
+            _, reward, done, _ = simulated_env.step(
+                action,
+                evaluate_counterfactual=False,
+            )
             total_reward += self._safe_float(reward)
             if done:
                 break

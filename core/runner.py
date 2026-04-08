@@ -30,7 +30,7 @@ class TaskRunner:
 
         while not done:
             # Agent selects action
-            action = agent.act(observation)
+            action = agent.act(self.env)
             counterfactual = self.counterfactual_evaluator.evaluate(self.env, action)
 
             # Environment step

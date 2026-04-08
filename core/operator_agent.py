@@ -80,9 +80,6 @@ class OperatorAgent:
                 if close_actions:
                     chosen = random.choice(close_actions)
 
-        print("EVALUATED ACTIONS:", evaluated_actions)
-        print("CHOSEN ACTION:", chosen)
-
         chosen_impact = float(chosen["impact"])
         was_necessary = chosen["action"]["type"] != "noop" and chosen_impact > 0.0
         confidence = self._confidence(chosen, best_candidate, evaluated_actions)

@@ -12,7 +12,7 @@ type BaselineRow = {
   scores: Record<string, number>;
 };
 
-export function BaselinesPage() {
+export function BaselinesPage({ onOpenComparison }: { onOpenComparison: () => void }) {
   const [results, setResults] = useState<BaselineResults>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -22,7 +22,7 @@ export function BaselinesPage() {
     let cancelled = false;
     setLoading(true);
 
-    runBaselines()
+    runBaselines(reloadKey > 0)
       .then((response) => {
         if (!cancelled) {
           setResults(response);
@@ -55,32 +55,37 @@ export function BaselinesPage() {
   return (
     <PageContainer
       title="Baselines"
-      subtitle="A minimal comparison table for the built-in agent strategies across every task."
+      subtitle="A minimal comparison table for the actual switchable agents across every task."
     >
-      {loading && (
+      {loading ? (
         <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-2 text-gray-600">Running baseline evaluations...</span>
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#C38EB4]"></div>
+          <span className="ml-2 text-gray-400">Running baseline evaluations...</span>
         </div>
-      )}
-      
-      {error && !loading && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+      ) : null}
+
+      {error && !loading ? (
+        <div className="mb-6 rounded-xl border border-red-900/40 bg-red-500/10 p-4">
           <div className="flex">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              <svg className="h-5 w-5 text-red-300" viewBox="0 0 20 20" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                  clipRule="evenodd"
+                />
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Evaluation Error</h3>
-              <div className="mt-2 text-sm text-red-700">
+              <h3 className="text-sm font-medium text-red-200">Evaluation Error</h3>
+              <div className="mt-2 text-sm text-red-300">
                 <p>{error}</p>
               </div>
               <div className="mt-4">
                 <button
+                  type="button"
                   onClick={() => setReloadKey((current) => current + 1)}
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  className="inline-flex items-center rounded-lg border border-red-900/40 bg-red-500/10 px-3 py-2 text-sm font-medium leading-4 text-red-200 transition-colors hover:bg-red-500/20 focus:outline-none"
                 >
                   Retry
                 </button>
@@ -88,28 +93,37 @@ export function BaselinesPage() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {!loading && !error && (
-        <Section title="Agent scores" description="Each score is graded on the same deterministic trajectory rubric.">
+      {!loading && !error ? (
+        <Section
+          title="Agent scores"
+          description="Each score is graded on the same deterministic trajectory rubric using the same live agent set shown in the Agents page."
+          actions={
+            <button
+              type="button"
+              onClick={onOpenComparison}
+              className="inline-flex items-center rounded-full border border-[#2b313b] bg-[#171b21] px-3 py-2 text-[12px] font-medium text-gray-100 shadow-sm transition-colors hover:border-[#39404c] hover:bg-[#1b2028]"
+            >
+              Comparison view
+            </button>
+          }
+        >
           <Table<BaselineRow>
             columns={[
               {
                 key: "agent",
                 header: "Agent",
-                render: (row) => <span className="font-medium text-gray-900">{row.agent}</span>,
+                render: (row) => <span className="text-[13px] font-medium text-white">{row.agent}</span>,
               },
               ...taskIds.map((taskId) => ({
                 key: taskId,
                 header: taskId,
                 render: (row: BaselineRow) => {
                   const score = row.scores[taskId];
-                  const scoreClass = score >= 0.7 ? "text-green-600" : score >= 0.4 ? "text-yellow-600" : "text-red-600";
-                  return (
-                    <span className={`font-medium ${scoreClass}`}>
-                      {formatNumber(score, 4)}
-                    </span>
-                  );
+                  const scoreClass =
+                    score >= 0.7 ? "text-emerald-300" : score >= 0.4 ? "text-[#C38EB4]" : "text-red-300";
+                  return <span className={`text-[13px] font-medium tabular-nums ${scoreClass}`}>{formatNumber(score, 4)}</span>;
                 },
               })),
             ]}
@@ -118,7 +132,7 @@ export function BaselinesPage() {
             rows={rows}
           />
         </Section>
-      )}
+      ) : null}
     </PageContainer>
   );
 }

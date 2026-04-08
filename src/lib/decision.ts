@@ -17,7 +17,7 @@ export function getSystemStatus(
   pressure: number | undefined,
   failureFlags?: FailureFlags,
 ) {
-  if (failureFlags?.collapsed || (pressure ?? 0) >= 2) {
+  if (failureFlags?.collapsed || (pressure ?? 0) >= 2.4) {
     return {
       label: "Critical",
       dotClassName: "bg-red-500",
@@ -25,11 +25,11 @@ export function getSystemStatus(
     };
   }
 
-  if ((pressure ?? 0) >= 1) {
+  if ((pressure ?? 0) >= 1.15) {
     return {
       label: "Warning",
-      dotClassName: "bg-amber-500",
-      pillClassName: "border-amber-200 bg-amber-50 text-amber-600",
+      dotClassName: "bg-[#C38EB4]",
+      pillClassName: "border-[#C38EB4]/40 bg-[#C38EB4]/10 text-[#C38EB4]",
     };
   }
 

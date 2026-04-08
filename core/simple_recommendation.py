@@ -37,7 +37,7 @@ class SimpleRecommendationSystem:
             
             # Get agent recommendation
             agent = get_current_agent()
-            agent_action = self._normalize_action(agent.act(observation))
+            agent_action = self._normalize_action(agent.act(evaluation_env))
             
             # Evaluate all possible actions for comparison
             all_actions = self._generate_all_actions()
@@ -76,6 +76,7 @@ class SimpleRecommendationSystem:
                 "necessary": False,
                 "score": 0.0,
             }
+
             agent_eval = self._find_action_evaluation(agent_action, ranked_actions)
             agent_rank = self._find_action_rank(agent_action, ranked_actions)
             

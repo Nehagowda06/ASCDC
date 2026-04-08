@@ -1,15 +1,19 @@
 import type {
   AgentAction,
+  AutoRunnerStatus,
   BaselineResults,
   EnvironmentState,
   Observation,
   RecommendationResponse,
+  SystemLogEntry,
   StepResponse,
   TaskMap,
   TrajectoryStep,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE?.trim();
+let baselineResultsCache: BaselineResults | null = null;
+let baselineResultsPromise: Promise<BaselineResults> | null = null;
 
 function getApiBaseCandidates() {
   if (API_BASE) {
@@ -146,10 +150,32 @@ export function fetchTasks() {
   return request<TaskMap>("/tasks");
 }
 
-export function runBaselines() {
-  return request<BaselineResults>("/baseline", {
+export function runBaselines(force = false) {
+  if (force) {
+    baselineResultsCache = null;
+    baselineResultsPromise = null;
+  }
+
+  if (baselineResultsCache) {
+    return Promise.resolve(baselineResultsCache);
+  }
+
+  if (baselineResultsPromise) {
+    return baselineResultsPromise;
+  }
+
+  baselineResultsPromise = request<BaselineResults>("/baseline", {
     method: "POST",
-  });
+  })
+    .then((response) => {
+      baselineResultsCache = response;
+      return response;
+    })
+    .finally(() => {
+      baselineResultsPromise = null;
+    });
+
+  return baselineResultsPromise;
 }
 
 export function gradeTrajectory(trajectory: TrajectoryStep[]) {
@@ -178,4 +204,25 @@ export function resetSimpleMetrics() {
   return request<{ message: string }>("/metrics/reset", {
     method: "POST",
   });
+}
+
+export function getAutoStatus() {
+  return request<AutoRunnerStatus>("/auto/status");
+}
+
+export function startAutoRunner(payload?: { interval?: number; task_id?: string | null }) {
+  return request<AutoRunnerStatus>("/auto/start", {
+    method: "POST",
+    body: JSON.stringify(payload ?? {}),
+  });
+}
+
+export function stopAutoRunner() {
+  return request<AutoRunnerStatus>("/auto/stop", {
+    method: "POST",
+  });
+}
+
+export function getSystemLogs() {
+  return request<SystemLogEntry[]>("/logs");
 }

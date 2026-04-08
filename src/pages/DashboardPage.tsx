@@ -183,7 +183,7 @@ export function DashboardPage() {
 
             <div className="rounded-lg bg-blue-50 px-3 py-2 text-right">
               <p className="text-xs text-gray-500">Latency</p>
-              <p className="text-3xl font-semibold text-blue-600">{formatNumber(state.latency)}</p>
+              <p className="text-2xl font-semibold text-blue-600">{formatNumber(state.latency)}</p>
             </div>
           </div>
 

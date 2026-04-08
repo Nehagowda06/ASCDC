@@ -5,6 +5,14 @@ export type PendingAction = {
   type: string;
   target: string | null;
   applies_at: number;
+  magnitude?: number;
+};
+
+export type PendingEffect = {
+  type: string;
+  target: string | null;
+  magnitude?: number;
+  apply_at: number;
 };
 
 export type FailureFlags = {
@@ -25,7 +33,11 @@ export type Observation = {
   remaining_budget?: number;
   budget?: number;
   system_pressure?: number;
+  instability_score?: number;
+  drift_score?: number;
+  steps_since_action?: number;
   pending_actions?: PendingAction[];
+  pending_effects?: PendingEffect[];
   timestep?: number;
   done?: boolean;
 };
@@ -51,6 +63,9 @@ export type StepInfo = {
   latency: number;
   system_pressure: number;
   remaining_budget: number;
+  instability_score?: number;
+  drift_score?: number;
+  steps_since_action?: number;
   queue_growth?: number;
   scheduled_timestep?: number;
   pressure_delta?: number;
@@ -74,6 +89,26 @@ export type TaskItem = {
 
 export type TaskMap = Record<string, TaskItem>;
 export type BaselineResults = Record<string, Record<string, number>>;
+export type AutoRunnerStatus = {
+  running: boolean;
+  done?: boolean;
+  interval?: number | null;
+  steps_run?: number;
+  stop_reason?: string;
+  agent_name?: string;
+  last_reward?: number | null;
+  last_action?: AgentAction | null;
+  last_info?: Record<string, unknown>;
+  state?: EnvironmentState;
+};
+export type SystemLogEntry = {
+  timestep: number;
+  action: AgentAction;
+  reward: number;
+  pressure: number;
+  instability: number;
+  counterfactual: number;
+};
 
 export type RecommendationAlternative = {
   action: AgentAction;

@@ -22,55 +22,61 @@ export function MetricsPanel({ metrics }: MetricsPanelProps) {
       value: formatNumber(safeTotalReward, 2),
       hint: "Aggregate reward from the current trajectory.",
       icon: "R",
-      iconClassName: safeTotalReward >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700",
-      valueClassName: safeTotalReward >= 0 ? "text-green-600" : "text-red-600",
+      iconClassName:
+        safeTotalReward >= 0
+          ? "border border-emerald-900/40 bg-emerald-500/10 text-emerald-300"
+          : "border border-red-900/40 bg-red-500/10 text-red-300",
+      valueClassName: safeTotalReward >= 0 ? "text-emerald-300" : "text-red-300",
     },
     {
       label: "Necessary Ratio",
       value: formatPercent(safeNecessaryActionRatio),
       hint: "How often interventions outperformed waiting.",
       icon: "N",
-      iconClassName: "bg-blue-100 text-blue-700",
-      valueClassName: "text-blue-600",
+      iconClassName: "border border-[#C38EB4]/40 bg-[#C38EB4]/10 text-[#C38EB4]",
+      valueClassName: "text-[#C38EB4]",
     },
     {
       label: "Positive Impact",
       value: formatPercent(safePositiveImpactRate),
       hint: "Share of non-noop actions with positive impact.",
       icon: "P",
-      iconClassName: "bg-amber-100 text-amber-700",
-      valueClassName: "text-amber-600",
+      iconClassName: "border border-[#C38EB4]/40 bg-[#C38EB4]/10 text-[#C38EB4]",
+      valueClassName: "text-[#C38EB4]",
     },
     {
       label: "Average Impact",
       value: formatNumber(safeAverageImpact, 2),
       hint: "Mean counterfactual impact across interventions.",
       icon: "A",
-      iconClassName: safeAverageImpact >= 0 ? "bg-cyan-100 text-cyan-700" : "bg-red-100 text-red-700",
-      valueClassName: safeAverageImpact >= 0 ? "text-cyan-600" : "text-red-600",
+      iconClassName:
+        safeAverageImpact >= 0
+          ? "border border-cyan-900/40 bg-cyan-500/10 text-cyan-300"
+          : "border border-red-900/40 bg-red-500/10 text-red-300",
+      valueClassName: safeAverageImpact >= 0 ? "text-cyan-300" : "text-red-300",
     },
   ];
 
   return (
-    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
       {items.map((item) => (
         <Card
           key={item.label}
-          className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-md transition-all duration-200 hover:scale-[1.01] hover:shadow-lg"
+          className="bg-[#14181f] p-3.5 text-gray-100 shadow-sm"
         >
-          <div className="space-y-5">
+          <div className="space-y-2.5">
             <div className="flex items-center gap-3">
-              <div className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl text-sm font-bold shadow-sm ${item.iconClassName}`}>
+              <div className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-[13px] font-medium shadow-sm ${item.iconClassName}`}>
                 {item.icon}
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-gray-500">
+                <p className="text-[12px] text-gray-400">
                   {item.label}
                 </p>
-                <p className={`text-2xl font-semibold ${item.valueClassName}`}>{item.value}</p>
+                <p className={`text-[18px] font-semibold tracking-[-0.02em] ${item.valueClassName}`}>{item.value}</p>
               </div>
             </div>
-            <p className="text-sm leading-6 text-gray-600">{item.hint}</p>
+            <p className="text-[13px] leading-5 text-gray-400">{item.hint}</p>
           </div>
         </Card>
       ))}

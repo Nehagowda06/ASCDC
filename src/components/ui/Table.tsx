@@ -22,14 +22,14 @@ export function Table<T>({
   emptyMessage = "No records available.",
 }: TableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-[#242934] bg-[#14181f]">
       <table className="min-w-full border-collapse">
-        <thead className="bg-gray-50">
+        <thead className="bg-[#171c24]">
           <tr>
             {columns.map((column) => (
               <th
                 key={column.key}
-                className="p-4 text-left text-sm font-medium text-gray-500"
+                className="px-5 py-3.5 text-left text-[10px] font-medium uppercase tracking-[0.06em] text-gray-500"
               >
                 {column.header}
               </th>
@@ -41,7 +41,7 @@ export function Table<T>({
             <tr>
               <td
                 colSpan={columns.length}
-                className="p-4 text-left text-sm text-gray-500"
+                className="px-5 py-4 text-left text-[13px] text-gray-500"
               >
                 {emptyMessage}
               </td>
@@ -50,10 +50,10 @@ export function Table<T>({
             rows.map((row, index) => (
               <tr
                 key={getRowKey(row, index)}
-                className={`border-t border-gray-100 ${getRowClassName?.(row, index) ?? ""}`}
+                className={`border-t border-[#20252e] ${getRowClassName?.(row, index) ?? ""}`}
               >
                 {columns.map((column) => (
-                  <td key={column.key} className="p-4 align-top text-sm text-gray-900">
+                  <td key={column.key} className="px-5 py-4 align-top text-[13px] text-gray-100">
                     {column.render(row)}
                   </td>
                 ))}

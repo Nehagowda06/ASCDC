@@ -25,10 +25,10 @@ export function Layout({
   children,
 }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-900">
+    <div className="min-h-screen bg-[#0f1115] text-gray-100">
       <Sidebar activePage={activePage} items={items} onNavigate={onNavigate} />
-      <main className="md:pl-[240px]">
-        <div className="mx-auto max-w-content space-y-6 p-6 pt-24 md:p-6">
+      <main className="md:pl-[248px]">
+        <div className="mx-auto max-w-content space-y-5 p-3 pt-20 md:p-5 md:pt-5">
           <Topbar
             statusLabel={statusLabel}
             statusDotClassName={statusDotClassName}

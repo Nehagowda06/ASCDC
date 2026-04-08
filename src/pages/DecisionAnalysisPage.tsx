@@ -21,7 +21,7 @@ export function DecisionAnalysisPage({
       title="Analysis"
       subtitle="Inspect counterfactual rankings and understand how the operator distinguishes intervention from restraint."
     >
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <Section title="Decision summary" description="Recommended action with structured reasoning.">
           <DecisionPanel
             recommendation={recommendation}
@@ -38,10 +38,10 @@ export function DecisionAnalysisPage({
       <Section title="Interpretation" description="What the recommendation means for the current operating posture.">
         <Card className="shadow-sm">
           <div className="space-y-3">
-            <p className="text-sm text-gray-500">
+            <p className="text-[14px] leading-7 text-gray-300">
               The operator evaluates restart, scale, throttle, and noop actions over a short horizon and compares them to waiting. Positive impact means the action improves projected reward relative to doing nothing.
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-[14px] leading-7 text-gray-300">
               Necessary actions are the subset of interventions that outperform noop. When the best available intervention still underperforms waiting, the operator recommends noop.
             </p>
           </div>

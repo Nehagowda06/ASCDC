@@ -17,10 +17,10 @@ export function ActionComparison({ rows }: ActionComparisonProps) {
     <Card className="shadow-sm">
       <div className="space-y-4">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-gray-400">
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-gray-400">
             Action Comparison
           </p>
-          <p className="text-lg font-semibold text-gray-900">
+          <p className="text-lg font-medium text-white">
             Counterfactual ranking across available interventions
           </p>
         </div>
@@ -32,16 +32,16 @@ export function ActionComparison({ rows }: ActionComparisonProps) {
               header: "Action",
               render: (row) => (
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-900">
+                  <span className="text-[14px] font-medium text-white">
                     {row.label || formatActionLabel(row.action)}
                   </span>
                   {row.impact === bestImpact ? (
-                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">
+                    <span className="rounded-full border border-emerald-900/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.04em] text-emerald-300">
                       Best
                     </span>
                   ) : null}
                   {row.impact === worstImpact ? (
-                    <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700">
+                    <span className="rounded-full border border-red-900/40 bg-red-500/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.04em] text-red-300">
                       Worst
                     </span>
                   ) : null}
@@ -52,7 +52,7 @@ export function ActionComparison({ rows }: ActionComparisonProps) {
               key: "impact",
               header: "Impact",
               render: (row) => (
-                <span className={row.impact > 0 ? "text-emerald-600" : row.impact < 0 ? "text-red-500" : "text-gray-500"}>
+                <span className={`text-[14px] font-medium ${row.impact > 0 ? "text-emerald-300" : row.impact < 0 ? "text-red-300" : "text-gray-400"}`}>
                   {row.impact > 0 ? "+" : ""}
                   {formatNumber(row.impact, 2)}
                 </span>
@@ -62,7 +62,7 @@ export function ActionComparison({ rows }: ActionComparisonProps) {
               key: "necessary",
               header: "Necessary",
               render: (row) => (
-                <span className={row.necessary ? "text-emerald-600" : "text-gray-500"}>
+                <span className={`text-[14px] font-medium ${row.necessary ? "text-emerald-300" : "text-gray-500"}`}>
                   {row.action.type === "noop" ? "-" : row.necessary ? "true" : "false"}
                 </span>
               ),
@@ -72,9 +72,9 @@ export function ActionComparison({ rows }: ActionComparisonProps) {
           getRowKey={(row, index) => `${row.label}-${index}`}
           getRowClassName={(row) =>
             row.impact === bestImpact
-              ? "bg-emerald-50"
+              ? "bg-emerald-500/10"
               : row.impact === worstImpact
-                ? "bg-red-50"
+                ? "bg-red-500/10"
                 : ""
           }
           emptyMessage="No action comparison available."
