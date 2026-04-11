@@ -1,0 +1,45 @@
+# Python virtual environments
+venv/
+env/
+.venv/
+server/venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Node
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Artifacts / models
+artifacts/
+*.pt
+*.pth
+
+# Logs
+*.log
+
+# TypeScript build
+tsconfig.tsbuildinfo
+tsconfig.node.tsbuildinfo

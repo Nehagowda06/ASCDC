@@ -183,6 +183,8 @@ class ASCDCEnvironment:
             noop_cumulative_reward if evaluate_counterfactual else actual_reward
         )
         info["debug"] = self._debug_snapshot()
+<<<<<<< HEAD
+=======
         if self.instability_score < 0.5:
             regime = "stable"
         elif self.instability_score < 1.0:
@@ -197,6 +199,7 @@ class ASCDCEnvironment:
             "pressure": self.system_pressure,
             "instability": self.instability_score,
         }
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
         self.logs.append({
             "timestep": self.timestep,
@@ -499,6 +502,12 @@ class ASCDCEnvironment:
 
         if effect_type == "restart":
             self.queues[target] = 0.0
+<<<<<<< HEAD
+        elif effect_type == "scale":
+            self.capacities[target] += magnitude
+        elif effect_type == "throttle":
+            self._throttle_effects[target] = self._throttle_effects.get(target, 0.0) + magnitude
+=======
 
             if self.retry_rate > 0.6:
                 self._retry_spike = min(2.0, self._retry_spike + (0.18 * magnitude))
@@ -520,6 +529,7 @@ class ASCDCEnvironment:
                 self._error_spike = min(2.0, float(getattr(self, "_error_spike", 0.0)) + (0.05 * magnitude))
             else:
                 self._error_spike = min(2.0, float(getattr(self, "_error_spike", 0.0)) + (0.03 * magnitude))
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         elif effect_type == "retry_spike":
             self._retry_spike += magnitude
         elif effect_type == "latency_spike":
@@ -573,6 +583,12 @@ class ASCDCEnvironment:
 
         base_retry = min(2.0, 0.35 * self.retry_rate + 0.65 * utilization)
         base_error = min(2.0, 0.35 * self.error_rate + 0.65 * utilization)
+<<<<<<< HEAD
+        base_pressure = utilization + base_retry + base_error
+
+        if utilization > 0.6:
+            self.drift_score += 0.02 * utilization
+=======
         if len(self._throttle_effects) > 0:
             base_retry = min(2.0, base_retry + 0.05)
 
@@ -595,6 +611,7 @@ class ASCDCEnvironment:
             self.drift_score += 0.02 * utilization
         if sum(self.capacities.values()) > 60.0:
             self.drift_score += 0.02
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
         if self.system_pressure < 0.5:
             self.drift_score *= 0.85
@@ -615,12 +632,15 @@ class ASCDCEnvironment:
         if base_pressure < 0.9:
             self.instability_score *= 0.8
 
+<<<<<<< HEAD
+=======
         # regime shift: once unstable, system behaves differently
         if self.instability_score > 1.2:
             base_retry *= 1.15
             base_error *= 1.15
 
         self.instability_score = min(3.0, max(0.0, self.instability_score))
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         escalation = 0.0
         if self.instability_score > 0.0:
             escalation = min(3.0, math.exp(min(self.instability_score, 3.0) * 0.4) - 1.0)
@@ -635,6 +655,14 @@ class ASCDCEnvironment:
         if escalation > 0.0:
             base_retry = min(2.0, base_retry + 0.12 * escalation + 0.08 * self.instability_score)
             base_error = min(2.0, base_error + 0.18 * escalation + 0.1 * self.instability_score)
+<<<<<<< HEAD
+
+        self.retry_rate = base_retry
+        self.error_rate = base_error
+        self.system_pressure = utilization + 0.75 * self.retry_rate + 0.75 * self.error_rate
+        self._latency_spikes.clear()
+        self._retry_spike = 0.0
+=======
         if base_pressure > 2.0:
             base_retry *= 0.9
 
@@ -644,6 +672,7 @@ class ASCDCEnvironment:
         self._latency_spikes.clear()
         self._retry_spike = 0.0
         self._error_spike = 0.0
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         self._instability_penalty = 0.0
 
     # ---------------- REWARD ---------------- #
