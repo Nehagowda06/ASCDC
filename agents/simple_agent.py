@@ -8,6 +8,10 @@ import logging
 import random
 
 from core.agents.smart_agent import SmartAgent
+<<<<<<< HEAD
+from agents.cf_planner import CounterfactualPlannerAgent
+=======
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +105,15 @@ class SimpleAgent:
         target = self._worst_queue(snapshot)
         pressure = snapshot["system_pressure"]
 
+<<<<<<< HEAD
+        if max_ratio >= 2.0 or pressure >= 2.2:
+            return {"type": "restart", "target": target}
+
+        if max_ratio >= 0.95 or pressure >= 1.0:
+            return {"type": "scale", "target": target}
+
+        if max_ratio >= 0.65 and (snapshot["retry_rate"] >= 0.35 or snapshot["error_rate"] >= 0.25):
+=======
         # Aggressive restart for critical overload
         if max_ratio >= 1.8 or pressure >= 2.0:
             return {"type": "restart", "target": target}
@@ -115,6 +128,7 @@ class SimpleAgent:
 
         # Proactive throttle for building pressure
         if max_ratio >= 0.45 and pressure >= 0.7:
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
             return {"type": "throttle", "target": target}
 
         return {"type": "noop", "target": None}
@@ -125,6 +139,14 @@ class SimpleAgent:
         target = self._worst_queue(snapshot)
         pressure = snapshot["system_pressure"]
 
+<<<<<<< HEAD
+        if max_ratio >= 3.0 or pressure >= 2.8:
+            return {"type": "restart", "target": target}
+
+        if max_ratio >= 1.5 or pressure >= 1.7:
+            return {"type": "scale", "target": target}
+
+=======
         # Emergency restart
         if max_ratio >= 2.5 or pressure >= 2.5:
             return {"type": "restart", "target": target}
@@ -137,6 +159,7 @@ class SimpleAgent:
         if max_ratio >= 0.9 or pressure >= 1.2:
             return {"type": "throttle", "target": target}
 
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         return {"type": "noop", "target": None}
     
     def _aggressive_strategy(self, snapshot: Dict[str, Any]) -> Dict[str, Any]:
@@ -145,6 +168,17 @@ class SimpleAgent:
         target = self._worst_queue(snapshot)
         pressure = snapshot["system_pressure"]
 
+<<<<<<< HEAD
+        if max_ratio >= 2.5 or pressure >= 2.4:
+            return {"type": "restart", "target": target}
+
+        if max_ratio >= 0.75 or pressure >= 0.9:
+            return {"type": "throttle", "target": target}
+
+        if max_ratio >= 0.35 or pressure >= 0.5:
+            return {"type": "scale", "target": target}
+
+=======
         # Restart for high overload
         if max_ratio >= 2.0 or pressure >= 2.2:
             return {"type": "restart", "target": target}
@@ -157,10 +191,25 @@ class SimpleAgent:
         if max_ratio >= 0.3 or pressure >= 0.45:
             return {"type": "throttle", "target": target}
 
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         return {"type": "noop", "target": None}
 
 
 class LearningAgent:
+<<<<<<< HEAD
+    """State-aware learning agent backed by a lightweight Q-table."""
+
+    def __init__(
+        self,
+        alpha: float = 0.3,
+        alpha_decay: float = 0.999,
+        min_alpha: float = 0.05,
+        gamma: float = 0.9,
+        epsilon: float = 0.2,
+        epsilon_decay: float = 0.995,
+        min_epsilon: float = 0.02,
+        max_states: int = 500,
+=======
     """State-aware learning agent backed by an improved Q-learning algorithm."""
 
     def __init__(
@@ -173,6 +222,7 @@ class LearningAgent:
         epsilon_decay: float = 0.993,
         min_epsilon: float = 0.05,
         max_states: int = 1000,
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         seed: int = 0,
     ):
         self.initial_alpha = float(alpha)
@@ -186,6 +236,13 @@ class LearningAgent:
         self.min_epsilon = float(min_epsilon)
         self.max_states = int(max_states)
         self.rng = random.Random(seed)
+<<<<<<< HEAD
+        self.memory: List[tuple[tuple[float, str], Dict[str, Any], float]] = []
+        self.q_table: Dict[tuple[float, str], Dict[str, float]] = {}
+        self.state_order: List[tuple[float, str]] = []
+        self.last_state_signature: Optional[tuple[float, str]] = None
+        self.name = "Simple-learning"
+=======
         self.memory: List[tuple[tuple[float, str, str], Dict[str, Any], float]] = []
         self.q_table: Dict[tuple[float, str, str], Dict[str, float]] = {}
         self.state_order: List[tuple[float, str, str]] = []
@@ -193,12 +250,16 @@ class LearningAgent:
         self.name = "Simple-learning"
         self.episode_count = 0
         self.step_count = 0
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
     def act(self, observation: Any) -> Dict[str, Any]:
         snapshot = self._normalize_observation(observation)
         self.last_state_signature = self._state_signature(snapshot)
         action = self._best_known_action(snapshot)
+<<<<<<< HEAD
+=======
         self.step_count += 1
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
         self.alpha = max(self.min_alpha, self.alpha * self.alpha_decay)
         return action
@@ -229,7 +290,10 @@ class LearningAgent:
         state_actions = self.q_table.setdefault(state_signature, {})
         current_value = float(state_actions.get(action_key, 0.5))
 
+<<<<<<< HEAD
+=======
         # Compute TD target with better bootstrapping
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         next_best = 0.5
         if next_snapshot is not None:
             next_state_signature = self._state_signature(next_snapshot)
@@ -238,6 +302,10 @@ class LearningAgent:
             next_actions = self.q_table.get(next_state_signature, {})
             next_best = max(next_actions.values(), default=0.5)
 
+<<<<<<< HEAD
+        td_target = float(reward) + self.gamma * next_best
+        updated_value = current_value + self.alpha * (td_target - current_value)
+=======
         # TD update with adaptive learning rate based on reward magnitude
         reward_magnitude = abs(float(reward))
         adaptive_alpha = self.alpha * (1.0 + 0.2 * min(reward_magnitude, 2.0))
@@ -245,6 +313,7 @@ class LearningAgent:
         td_target = float(reward) + self.gamma * next_best
         td_error = td_target - current_value
         updated_value = current_value + adaptive_alpha * td_error
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         state_actions[action_key] = updated_value
 
         self.memory.append((state_signature, normalized_action, float(reward)))
@@ -254,6 +323,9 @@ class LearningAgent:
         state_signature = self._state_signature(snapshot)
         possible_actions = self._get_possible_actions(snapshot)
 
+<<<<<<< HEAD
+        if self.rng.random() < self.epsilon:
+=======
         # Epsilon-greedy with pressure-aware exploration
         pressure = float(snapshot.get("system_pressure", 0.0) or 0.0)
         exploration_rate = self.epsilon
@@ -263,6 +335,7 @@ class LearningAgent:
             exploration_rate *= 1.2  # More exploration in calm
 
         if self.rng.random() < exploration_rate:
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
             return deepcopy(self.rng.choice(possible_actions))
 
         known_actions = self.q_table.get(state_signature, {})
@@ -290,7 +363,10 @@ class LearningAgent:
         self.last_state_signature = None
         self.epsilon = self.initial_epsilon
         self.alpha = self.initial_alpha
+<<<<<<< HEAD
+=======
         self.episode_count += 1
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
     def _normalize_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
         action_type = str(action.get("type", action.get("action_type", "noop"))).lower()
@@ -307,22 +383,31 @@ class LearningAgent:
             queues = getattr(observation, "queues", {}) or {}
             capacities = getattr(observation, "capacities", {}) or {}
             system_pressure = float(getattr(observation, "system_pressure", 0.0) or 0.0)
+<<<<<<< HEAD
+=======
             retry_rate = float(getattr(observation, "retry_rate", 0.0) or 0.0)
             error_rate = float(getattr(observation, "error_rate", 0.0) or 0.0)
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         elif isinstance(observation, dict):
             queues = observation.get("queues", {}) or {}
             capacities = observation.get("capacities", {}) or {}
             system_pressure = float(
                 observation.get("system_pressure", observation.get("pressure", 0.0)) or 0.0
             )
+<<<<<<< HEAD
+=======
             retry_rate = float(observation.get("retry_rate", 0.0) or 0.0)
             error_rate = float(observation.get("error_rate", 0.0) or 0.0)
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         else:
             queues = {}
             capacities = {}
             system_pressure = 0.0
+<<<<<<< HEAD
+=======
             retry_rate = 0.0
             error_rate = 0.0
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
         normalized_queues = {
             str(queue): float(value or 0.0)
@@ -337,6 +422,13 @@ class LearningAgent:
             "queues": normalized_queues,
             "capacities": normalized_capacities,
             "system_pressure": system_pressure,
+<<<<<<< HEAD
+        }
+
+    def _state_signature(self, snapshot: Dict[str, Any]) -> tuple[float, str]:
+        queues = snapshot.get("queues", {}) or {}
+        rounded_pressure = round(float(snapshot.get("system_pressure", 0.0) or 0.0), 1)
+=======
             "retry_rate": retry_rate,
             "error_rate": error_rate,
         }
@@ -352,16 +444,21 @@ class LearningAgent:
         pressure_bucket = round(pressure * 2) / 2  # 0.5 granularity
         
         # Identify bottleneck queue
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         bottleneck = max(
             queues,
             key=lambda queue: float(queues.get(queue, 0.0) or 0.0),
             default="A",
         )
+<<<<<<< HEAD
+        return (rounded_pressure, str(bottleneck))
+=======
         
         # Encode error/retry state
         error_state = "high" if (retry_rate > 0.5 or error_rate > 0.3) else "normal"
         
         return (pressure_bucket, str(bottleneck), error_state)
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
     def _get_possible_actions(self, snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
         queue_targets = sorted((snapshot.get("queues", {}) or {}).keys()) or ["A", "B", "C"]
@@ -378,7 +475,11 @@ class LearningAgent:
         normalized_action = self._normalize_action(action)
         return f"{normalized_action['type']}:{normalized_action.get('target') or 'none'}"
 
+<<<<<<< HEAD
+    def _register_state(self, state_signature: tuple[float, str]) -> None:
+=======
     def _register_state(self, state_signature: tuple[float, str, str]) -> None:
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         if state_signature in self.q_table:
             return
 
@@ -462,12 +563,24 @@ class MetricsTracker:
 # Global metrics tracker
 metrics_tracker = MetricsTracker()
 
+<<<<<<< HEAD
+def _make_cf_planner() -> Any:
+    from env.environment import ASCDCEnvironment
+    return CounterfactualPlannerAgent(ASCDCEnvironment())
+
+
+=======
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 AGENT_FACTORIES: Dict[str, Callable[[], Any]] = {
     "simple-adaptive": lambda: SimpleAgent("adaptive"),
     "strong-decision": SmartAgent,
     "simple-learning": LearningAgent,
     "simple-conservative": lambda: SimpleAgent("conservative"),
     "simple-aggressive": lambda: SimpleAgent("aggressive"),
+<<<<<<< HEAD
+    "cf-planner": _make_cf_planner,
+=======
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 }
 
 # Available agents

@@ -1,3 +1,37 @@
+<<<<<<< HEAD
+"""
+inference.py — ASCDC Hackathon Submission
+Scaler School of Technology × Meta × PyTorch × Hugging Face
+
+Rules compliance:
+  - Uses OpenAI client for all LLM calls (API_BASE_URL / MODEL_NAME / HF_TOKEN)
+  - Emits [START], [STEP], [END] structured stdout logs
+  - Runs all 3 deterministic tasks and reports per-task scores
+  - No env modification, no external deps beyond requirements.txt
+  - Runtime well under 20 min on vcpu=2 / 8 GB RAM
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from copy import deepcopy
+from typing import Any, Dict, List
+
+from openai import OpenAI
+
+from env.environment import ASCDCEnvironment
+from agents.cf_planner import CounterfactualPlannerAgent
+from core.counterfactual import CounterfactualEvaluator
+from grader.grader import ASCDCGrader
+from tasks.definitions import TASKS
+
+# ── ENV VARS (hackathon mandatory) ──────────────────────────────────────────
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+MODEL_NAME   = os.getenv("MODEL_NAME",   "gpt-4o-mini")
+HF_TOKEN     = os.getenv("HF_TOKEN",     "no-token")
+=======
 import os
 from openai import OpenAI
 
@@ -5,12 +39,215 @@ from openai import OpenAI
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 HF_TOKEN = os.getenv("HF_TOKEN")
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
 client = OpenAI(
     base_url=API_BASE_URL,
     api_key=HF_TOKEN,
 )
 
+<<<<<<< HEAD
+grader    = ASCDCGrader()
+evaluator = CounterfactualEvaluator()
+
+
+# ── LLM HELPER ───────────────────────────────────────────────────────────────
+
+def llm_decide(obs_summary: str, candidates: List[str]) -> str:
+    """
+    Ask the LLM to pick the best action from a ranked candidate list.
+    Returns the action string chosen by the model (or candidates[0] on failure).
+    """
+    system_prompt = (
+        "You are an expert distributed-systems control agent for the ASCDC environment. "
+        "You receive a summary of the current system state and a ranked list of candidate "
+        "actions (best first, by counterfactual impact). "
+        "Reply with ONLY the action string exactly as given — no explanation."
+    )
+    user_prompt = (
+        f"System state:\n{obs_summary}\n\n"
+        f"Candidate actions (ranked best→worst by counterfactual impact):\n"
+        + "\n".join(f"  {i+1}. {a}" for i, a in enumerate(candidates))
+        + "\n\nChoose the single best action:"
+    )
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            max_tokens=20,
+            temperature=0.0,
+        )
+        choice = response.choices[0].message.content.strip()
+        # Validate the LLM returned one of the candidates
+        if choice in candidates:
+            return choice
+        # Fuzzy match: accept if the candidate string starts with the reply
+        for c in candidates:
+            if c.startswith(choice) or choice.startswith(c.split()[0]):
+                return c
+    except Exception:
+        pass
+    return candidates[0]
+
+
+def _action_label(action: Dict[str, Any]) -> str:
+    t = action.get("type", "noop")
+    tgt = action.get("target")
+    return f"{t.upper()} {tgt}" if tgt else t.upper()
+
+
+def _obs_summary(env: ASCDCEnvironment) -> str:
+    s = env.state()
+    queues = s.get("queues", {})
+    caps   = s.get("capacities", {})
+    ratios = {
+        q: round(queues.get(q, 0.0) / max(caps.get(q, 1.0), 1.0), 3)
+        for q in ("A", "B", "C")
+    }
+    return (
+        f"pressure={s.get('system_pressure', 0):.3f}  "
+        f"instability={s.get('instability_score', 0):.3f}  "
+        f"drift={s.get('smoothed_drift', 0):.3f}  "
+        f"budget={s.get('remaining_budget', 0):.1f}  "
+        f"queues={queues}  ratios={ratios}  "
+        f"retry={s.get('retry_rate', 0):.3f}  "
+        f"error={s.get('error_rate', 0):.3f}  "
+        f"locks={s.get('active_locks', {})}"
+    )
+
+
+# ── CORE EPISODE RUNNER ──────────────────────────────────────────────────────
+
+def run_task(task_id: str, task_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Run one full episode for a task.
+    Uses CounterfactualPlannerAgent to generate ranked candidates,
+    then asks the LLM to confirm / override the top pick.
+    Returns the graded trajectory summary.
+    """
+    env   = ASCDCEnvironment(seed=task_cfg.get("seed", 42))
+    agent = CounterfactualPlannerAgent(env, max_candidates=6)
+    obs   = env.reset(config=deepcopy(task_cfg))
+
+    trajectory: List[Dict[str, Any]] = []
+    step_idx = 0
+
+    while True:
+        # 1. Agent builds ranked candidates via counterfactual evaluation
+        snapshot  = agent._snapshot(env)
+        regime    = agent._regime(snapshot)
+        candidates_raw = agent._build_candidates(snapshot, regime)
+
+        # 2. Score each candidate so we can rank for the LLM
+        scored: List[tuple[float, Dict[str, Any]]] = []
+        for cand in candidates_raw:
+            try:
+                cf    = evaluator.evaluate(env, cand)
+                score = float(cf.get("counterfactual_impact", 0.0))
+            except Exception:
+                score = 0.0
+            scored.append((score, cand))
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        ranked_labels = [_action_label(c) for _, c in scored]
+        label_to_action = {_action_label(c): c for _, c in scored}
+
+        # 3. Ask LLM to confirm best action (uses OpenAI client — hackathon rule)
+        obs_text    = _obs_summary(env)
+        chosen_label = llm_decide(obs_text, ranked_labels)
+        action       = label_to_action.get(chosen_label, scored[0][1])
+
+        # 4. Step the environment
+        cf_info                  = evaluator.evaluate(env, action)
+        next_obs, reward, done, info = env.step(action)
+        info.update(cf_info)
+
+        trajectory.append({
+            "timestep":         env.timestep,
+            "observation":      obs,
+            "action":           action,
+            "reward":           reward,
+            "next_observation": next_obs,
+            "done":             done,
+            "info":             info,
+        })
+
+        # ── Mandatory [STEP] log format ──────────────────────────────────
+        print(
+            f"[STEP] task={task_id} step={step_idx} "
+            f"regime={regime} "
+            f"action={_action_label(action)} "
+            f"reward={reward:.4f} "
+            f"cf_impact={info.get('counterfactual_impact', 0.0):.4f} "
+            f"pressure={info.get('system_pressure', 0.0):.3f} "
+            f"budget={info.get('remaining_budget', 0.0):.1f} "
+            f"necessary={info.get('was_action_necessary', False)}"
+        )
+        sys.stdout.flush()
+
+        obs = next_obs
+        step_idx += 1
+
+        if done:
+            break
+
+    score = grader.grade(trajectory)
+    total_reward = sum(float(s["reward"]) for s in trajectory)
+
+    return {
+        "task_id":      task_id,
+        "score":        score,
+        "total_reward": round(total_reward, 4),
+        "steps":        len(trajectory),
+        "collapsed":    any(
+            s["info"].get("failure_flags", {}).get("collapsed", False)
+            for s in trajectory
+        ),
+    }
+
+
+# ── MAIN ─────────────────────────────────────────────────────────────────────
+
+def run() -> None:
+    print("[START]")
+    sys.stdout.flush()
+
+    all_results: List[Dict[str, Any]] = []
+
+    for task_id, task_data in TASKS.items():
+        cfg = deepcopy(task_data["config"])
+        print(
+            f"[STEP] task={task_id} name={task_data['name']} status=starting"
+        )
+        sys.stdout.flush()
+
+        result = run_task(task_id, cfg)
+        all_results.append(result)
+
+        print(
+            f"[STEP] task={task_id} status=complete "
+            f"score={result['score']:.4f} "
+            f"total_reward={result['total_reward']:.4f} "
+            f"steps={result['steps']} "
+            f"collapsed={result['collapsed']}"
+        )
+        sys.stdout.flush()
+
+    # Aggregate
+    avg_score  = sum(r["score"]        for r in all_results) / len(all_results)
+    avg_reward = sum(r["total_reward"] for r in all_results) / len(all_results)
+
+    print(
+        f"[END] tasks={len(all_results)} "
+        f"avg_score={avg_score:.4f} "
+        f"avg_reward={avg_reward:.4f} "
+        f"scores={json.dumps({r['task_id']: r['score'] for r in all_results})}"
+    )
+    sys.stdout.flush()
+=======
 def run():
     print("START")
 
@@ -31,10 +268,13 @@ def run():
         print(f"STEP {step} | action={action} | reward={reward}")
 
     print("END")
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
 
 if __name__ == "__main__":
     run()
+<<<<<<< HEAD
+=======
 
 import gradio as gr
 
@@ -43,3 +283,4 @@ def app():
     return "Execution complete"
 
 gr.Interface(fn=app, inputs=[], outputs="text").launch()
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908

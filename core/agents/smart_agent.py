@@ -9,7 +9,11 @@ from env.environment import ASCDCEnvironment
 class SmartAgent:
     PERSISTENT_QUEUE_THRESHOLD = 4
 
+<<<<<<< HEAD
+    def __init__(self, horizon: int = 10):
+=======
     def __init__(self, horizon: int = 12):
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         self.horizon = max(1, int(horizon))
         self._queue_persistence: Dict[str, int] = {queue: 0 for queue in ("A", "B", "C")}
         self._last_timestep = -1
@@ -97,6 +101,18 @@ class SmartAgent:
 
         score = total
         pressure = float(observation.get("system_pressure", 0.0) or 0.0)
+<<<<<<< HEAD
+        first_action = actions[0]
+
+        if pressure > 2.0 and first_action["type"] != "noop":
+            score += 1.0
+
+        if pressure < 1.0 and first_action["type"] != "noop":
+            score -= 0.5
+
+        if pressure > 2.0 and first_action["type"] == "throttle":
+            score += 0.5
+=======
         instability = float(observation.get("instability_score", 0.0) or 0.0)
         first_action = actions[0]
 
@@ -111,6 +127,7 @@ class SmartAgent:
         # Slight penalty for premature action in calm states
         if pressure < 0.8 and first_action["type"] != "noop":
             score -= 0.3
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
         return score
 
