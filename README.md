@@ -1,6 +1,10 @@
 # ASCDC
 Adaptive System Control & Decision Console
 
+We model decision-making in systems with delayed consequences and irreversible degradation.
+
+Agents are evaluated using counterfactual rollouts to measure true decision quality under uncertainty.
+
 A counterfactual decision engine for stabilizing distributed systems under delayed feedback, constrained actions, and non-linear dynamics.
 
 ---
@@ -15,6 +19,18 @@ The system is designed to answer a harder question than standard control:
 > but “was acting necessary at all?”
 
 It does this through **temporal simulation + counterfactual evaluation**, exposing decision quality under uncertainty.
+
+---
+
+## Key Feature: Counterfactual Decision Evaluation
+
+Each action is evaluated against alternatives using short-horizon counterfactual rollouts.
+
+This enables:
+
+* comparison vs noop
+* comparison vs alternative actions
+* explicit measurement of decision quality
 
 ---
 
@@ -126,12 +142,11 @@ src/        → React frontend
 ### Backend
 
 ```bash
-cd server
 python -m venv venv
 source venv/bin/activate     # Windows: venv\Scripts\activate
 
 pip install -r requirements.txt
-uvicorn app:app --reload
+uvicorn server.app:app --host 0.0.0.0 --port 8000
 ```
 
 Backend:
@@ -188,3 +203,71 @@ It is a **decision evaluation system** that models:
 - and counterfactual correctness
 
 to determine when intervention is actually justified.
+
+---
+
+## Reproducibility
+
+* Fixed seed = 42
+* Deterministic environment transitions
+* Same seed produces identical trajectories
+
+---
+
+## Performance Snapshot
+
+| Agent         | Avg Reward      | Stability |
+| ------------- | --------------- | --------- |
+| RandomAgent   | -460 to -410    | Collapse  |
+| SimpleAgent   | -230 to -190    | Unstable  |
+| SmartAgent    | -200 to -180    | Stable    |
+
+Values are averaged over multiple runs with fixed seed configurations and demonstrate consistent performance differences.
+
+## Baseline Comparison
+
+| Agent         | Strategy        | Outcome          |
+| ------------- | --------------- | ---------------- |
+| RandomAgent   | Random actions  | System collapse  |
+| SimpleAgent   | Threshold-based| Unstable under load |
+| SmartAgent    | Planning-based | Stabilizes system |
+
+## Agent Comparison
+
+| Agent              | Strategy              | Behavior                | Outcome              |
+| ------------------ | --------------------- | ----------------------- | -------------------- |
+| simple-aggressive   | Aggressive threshold  | Acts on any imbalance   | High action frequency |
+| simple-conservative| Conservative threshold| Acts only in emergencies | Low action frequency  |
+| simple-adaptive     | Adaptive heuristics   | Rule-based              | Moderate stability   |
+| simple-learning     | Q-learning            | Adaptive learning       | Inconsistent         |
+| strong-decision     | Planning-based        | Short-horizon reasoning | Best performance     |
+
+---
+
+## Failure Scenario
+
+If no action taken for 3 steps:
+
+* System enters degraded regime
+* Recovery cost increases 3x
+* Instability becomes irreversible
+
+This demonstrates delayed causality and irreversible system degradation.
+
+---
+
+## Audit
+
+Run full system audit:
+
+```bash
+bash audit.sh
+```
+
+This verifies:
+
+* type safety
+* environment execution
+* inference pipeline
+* agent compatibility
+* API integrity

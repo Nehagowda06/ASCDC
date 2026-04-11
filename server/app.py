@@ -2,6 +2,7 @@ import asyncio
 import math
 import logging
 import time
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException
@@ -15,20 +16,13 @@ from core.auto_runner import AutoRunner
 from core.simple_recommendation import SimpleRecommendationSystem
 from agents import create_agent, get_available_agents, set_agent, get_current_agent, get_current_agent_name, get_metrics, update_metrics, reset_metrics
 from core.pipeline import EvaluationPipeline
+from core.models.policy_agent import PolicyAgent
 from env.environment import ASCDCEnvironment
 from grader.grader import ASCDCGrader
-<<<<<<< HEAD
-=======
-from models import ObservationModel, StepResponseModel
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 from tasks.definitions import TASKS
 
 
 logger = logging.getLogger(__name__)
-<<<<<<< HEAD
-=======
-MAX_CONCURRENT_ENVS = 32
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
 app = FastAPI()
 app.title = "ASCDC OpenEnv"
@@ -62,6 +56,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 active_env = ASCDCEnvironment()
 recommendation_system = SimpleRecommendationSystem(active_env)
 counterfactual_evaluator = CounterfactualEvaluator()
+policy_agent: Optional[PolicyAgent] = None
 
 pipeline = EvaluationPipeline(TASKS)
 grader = ASCDCGrader()
@@ -181,28 +176,6 @@ def _record_auto_step(
 @app.get("/")
 def root():
     return _json_safe({"message": "ASCDC API running"})
-
-
-<<<<<<< HEAD
-=======
-@app.get("/schema")
-def schema():
-    return {
-        "action_space": {
-            "type": ["scale", "restart", "throttle", "noop"],
-            "target": ["A", "B", "C"],
-            "magnitude": "float"
-        },
-        "observation_space": {
-            "pressure": "float",
-            "latency": "float",
-            "instability": "float",
-            "budget": "float"
-        }
-    }
-
-
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 @app.post(
     "/reset",
     summary="Reset active environment",
@@ -280,12 +253,21 @@ def recommend_action(current_state: Optional[Dict[str, Any]] = None):
     description="Returns whether the optional PyTorch policy model is loaded and whether it came from local storage or Hugging Face.",
 )
 def get_model_info():
-    return _json_safe({
-        "loaded": True,
-        "source": "simple_agent",
-        "agent_name": get_current_agent_name(),
-        "strategy": get_current_agent_name().replace("simple-", "", 1),
-    })
+    global policy_agent
+
+    local_model_path = Path("artifacts/ascdc-policy-model.pt")
+    if policy_agent is None and local_model_path.exists():
+        policy_agent = PolicyAgent(model_path=local_model_path)
+
+    if policy_agent is None:
+        return {
+            "loaded": False,
+            "source": "unavailable",
+            "repo_id": "ascdc-policy-model",
+            "model_path": str(local_model_path),
+        }
+
+    return policy_agent.model_info()
 
 
 @app.post(
@@ -310,40 +292,18 @@ def step(action: Dict[str, Any]):
         counterfactual = counterfactual_evaluator.evaluate(active_env, normalized_action)
         obs, reward, done, info = active_env.step(normalized_action)
         info.update(counterfactual)
-<<<<<<< HEAD
-=======
-        info["decision_quality"] = info.get("counterfactual_impact", 0.0)
-        info["was_action_necessary"] = info.get("counterfactual_impact", 0.0) > 0
-        info["counterfactual_gap"] = info.get("counterfactual_gap", info.get("counterfactual_impact", 0.0))
-        info["best_alternative"] = info.get("best_alternative")
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         
         # Update simple metrics
         update_metrics(reward, normalized_action, info, pre_observation, obs)
         
         duration = time.time() - start
         logger.info("[STEP] took %.4fs", duration)
-<<<<<<< HEAD
         return _json_safe({
             "observation": obs,
             "reward": reward,
             "done": done,
             "info": info
         })
-=======
-        obs_dict = {
-            "pressure": obs.system_pressure,
-            "latency": obs.latency,
-            "instability": obs.instability_score,
-            "budget": obs.remaining_budget,
-        }
-        return StepResponseModel(
-            observation=ObservationModel(**obs_dict),
-            reward=reward,
-            done=done,
-            info=info
-        )
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
     except HTTPException:
         raise
     except Exception as e:

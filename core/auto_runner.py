@@ -46,7 +46,8 @@ class AutoRunner:
         try:
             while self.running:
                 pre_observation = deepcopy(observation)
-                action = self.agent.act(self.env)
+                snapshot = observation
+                action = self.agent.act(self.env) if hasattr(self.agent, "requires_env") else self.agent.act(snapshot)
                 self.last_action = self._normalize_action(action)
                 extra_info = {}
                 if self.evaluation_callback is not None:

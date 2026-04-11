@@ -37,7 +37,10 @@ class SimpleRecommendationSystem:
             
             # Get agent recommendation
             agent = get_current_agent()
-            agent_action = self._normalize_action(agent.act(evaluation_env))
+            snapshot = evaluation_env._build_observation()
+            agent_action = self._normalize_action(
+                agent.act(evaluation_env) if hasattr(agent, "requires_env") else agent.act(snapshot)
+            )
             
             # Evaluate all possible actions for comparison
             all_actions = self._generate_all_actions()

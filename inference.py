@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 inference.py — ASCDC Hackathon Submission
 Scaler School of Technology × Meta × PyTorch × Hugging Face
@@ -22,7 +21,7 @@ from typing import Any, Dict, List
 from openai import OpenAI
 
 from env.environment import ASCDCEnvironment
-from agents.cf_planner import CounterfactualPlannerAgent
+from core.agents.smart_agent import SmartAgent
 from core.counterfactual import CounterfactualEvaluator
 from grader.grader import ASCDCGrader
 from tasks.definitions import TASKS
@@ -31,22 +30,15 @@ from tasks.definitions import TASKS
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 MODEL_NAME   = os.getenv("MODEL_NAME",   "gpt-4o-mini")
 HF_TOKEN     = os.getenv("HF_TOKEN",     "no-token")
-=======
-import os
-from openai import OpenAI
-
-# --- ENV VARS ---
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN = os.getenv("HF_TOKEN")
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
+LLM_DISABLED = API_BASE_URL.rstrip("/") == "http://localhost:8000"
+LLM_WARNING_EMITTED = False
 
 client = OpenAI(
     base_url=API_BASE_URL,
     api_key=HF_TOKEN,
+    max_retries=0,
 )
 
-<<<<<<< HEAD
 grader    = ASCDCGrader()
 evaluator = CounterfactualEvaluator()
 
@@ -70,6 +62,13 @@ def llm_decide(obs_summary: str, candidates: List[str]) -> str:
         + "\n".join(f"  {i+1}. {a}" for i, a in enumerate(candidates))
         + "\n\nChoose the single best action:"
     )
+    global LLM_WARNING_EMITTED
+    if LLM_DISABLED:
+        if not LLM_WARNING_EMITTED:
+            print("[LLM WARNING] Falling back to heuristic: API_BASE_URL points to the environment server, not an OpenAI-compatible chat endpoint.")
+            LLM_WARNING_EMITTED = True
+        return candidates[0]
+
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
@@ -79,6 +78,7 @@ def llm_decide(obs_summary: str, candidates: List[str]) -> str:
             ],
             max_tokens=20,
             temperature=0.0,
+            timeout=5.0,
         )
         choice = response.choices[0].message.content.strip()
         # Validate the LLM returned one of the candidates
@@ -88,8 +88,9 @@ def llm_decide(obs_summary: str, candidates: List[str]) -> str:
         for c in candidates:
             if c.startswith(choice) or choice.startswith(c.split()[0]):
                 return c
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[LLM WARNING] Falling back to heuristic: {e}")
+        return candidates[0]
     return candidates[0]
 
 
@@ -124,30 +125,46 @@ def _obs_summary(env: ASCDCEnvironment) -> str:
 def run_task(task_id: str, task_cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
     Run one full episode for a task.
-    Uses CounterfactualPlannerAgent to generate ranked candidates,
+    Uses SmartAgent to generate action decisions,
     then asks the LLM to confirm / override the top pick.
     Returns the graded trajectory summary.
     """
     env   = ASCDCEnvironment(seed=task_cfg.get("seed", 42))
-    agent = CounterfactualPlannerAgent(env, max_candidates=6)
+    agent = SmartAgent(horizon=12)
     obs   = env.reset(config=deepcopy(task_cfg))
 
     trajectory: List[Dict[str, Any]] = []
     step_idx = 0
 
     while True:
-        # 1. Agent builds ranked candidates via counterfactual evaluation
-        snapshot  = agent._snapshot(env)
-        regime    = agent._regime(snapshot)
-        candidates_raw = agent._build_candidates(snapshot, regime)
+        # 1. Agent generates action via planning
+        snapshot  = env._build_observation()
+        action    = agent.act(env) if hasattr(agent, "requires_env") else agent.act(snapshot)
 
+        # 2. Score action via counterfactual evaluation
+        try:
+            cf    = evaluator.evaluate(env, action)
+            score = float(cf.get("counterfactual_impact", 0.0))
+        except Exception as e:
+            print(f"[ERROR] {e}")
+            score = 0.0
+        
+        # Build candidates for LLM (current action + alternatives)
+        candidates_raw = [
+            action,
+            {"type": "noop", "target": None},
+            {"type": "scale", "target": "A"},
+            {"type": "restart", "target": "B"},
+        ]
+        
         # 2. Score each candidate so we can rank for the LLM
         scored: List[tuple[float, Dict[str, Any]]] = []
         for cand in candidates_raw:
             try:
                 cf    = evaluator.evaluate(env, cand)
                 score = float(cf.get("counterfactual_impact", 0.0))
-            except Exception:
+            except Exception as e:
+                print(f"[ERROR] {e}")
                 score = 0.0
             scored.append((score, cand))
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -178,7 +195,6 @@ def run_task(task_id: str, task_cfg: Dict[str, Any]) -> Dict[str, Any]:
         # ── Mandatory [STEP] log format ──────────────────────────────────
         print(
             f"[STEP] task={task_id} step={step_idx} "
-            f"regime={regime} "
             f"action={_action_label(action)} "
             f"reward={reward:.4f} "
             f"cf_impact={info.get('counterfactual_impact', 0.0):.4f} "
@@ -247,40 +263,7 @@ def run() -> None:
         f"scores={json.dumps({r['task_id']: r['score'] for r in all_results})}"
     )
     sys.stdout.flush()
-=======
-def run():
-    print("START")
-
-    for step in range(10):
-        prompt = "Decide next action based on system state"
-
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": "You are a system control agent."},
-                {"role": "user", "content": prompt}
-            ],
-        )
-
-        action = response.choices[0].message.content
-        reward = 0  # replace later with real env
-
-        print(f"STEP {step} | action={action} | reward={reward}")
-
-    print("END")
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
 
 if __name__ == "__main__":
     run()
-<<<<<<< HEAD
-=======
-
-import gradio as gr
-
-def app():
-    run()  # your existing function
-    return "Execution complete"
-
-gr.Interface(fn=app, inputs=[], outputs="text").launch()
->>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908

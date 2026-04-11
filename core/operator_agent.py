@@ -9,7 +9,8 @@ from core.counterfactual import CounterfactualEvaluator
 
 try:
     from core.models.policy_agent import PolicyAgent
-except Exception:
+except Exception as e:
+    print(f"[ERROR] {e}")
     PolicyAgent = None
 
 
@@ -24,7 +25,8 @@ class OperatorAgent:
         if self.policy_agent is None and PolicyAgent is not None:
             try:
                 self.policy_agent = PolicyAgent()
-            except Exception:
+            except Exception as e:
+                print(f"[ERROR] {e}")
                 self.policy_agent = None
         self.history: List[Dict[str, Any]] = []
 
@@ -181,7 +183,8 @@ class OperatorAgent:
             return 0.0
         try:
             return self._safe_float(self.policy_agent.score_action(observation, action))
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] {e}")
             return 0.0
 
     def _confidence(
