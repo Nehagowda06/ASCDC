@@ -8,6 +8,7 @@ import logging
 import random
 
 from core.agents.smart_agent import SmartAgent
+from agents.cf_planner import CounterfactualPlannerAgent
 
 logger = logging.getLogger(__name__)
 
@@ -408,12 +409,18 @@ class MetricsTracker:
 # Global metrics tracker
 metrics_tracker = MetricsTracker()
 
+def _make_cf_planner() -> Any:
+    from env.environment import ASCDCEnvironment
+    return CounterfactualPlannerAgent(ASCDCEnvironment())
+
+
 AGENT_FACTORIES: Dict[str, Callable[[], Any]] = {
     "simple-adaptive": lambda: SimpleAgent("adaptive"),
     "strong-decision": SmartAgent,
     "simple-learning": LearningAgent,
     "simple-conservative": lambda: SimpleAgent("conservative"),
     "simple-aggressive": lambda: SimpleAgent("aggressive"),
+    "cf-planner": _make_cf_planner,
 }
 
 # Available agents
