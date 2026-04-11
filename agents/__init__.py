@@ -17,14 +17,21 @@ from .simple_agent import (
     reset_metrics,
     AVAILABLE_AGENTS
 )
+<<<<<<< HEAD
 from .cf_planner import CounterfactualPlannerAgent
+=======
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
 __all__ = [
     "LearningAgent",
     "SimpleAgent",
     "SmartAgent",
+<<<<<<< HEAD
     "MetricsTracker",
     "CounterfactualPlannerAgent",
+=======
+    "MetricsTracker", 
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
     "get_current_agent",
     "get_current_agent_name",
     "set_agent",

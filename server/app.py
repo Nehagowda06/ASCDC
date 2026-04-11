@@ -17,10 +17,18 @@ from agents import create_agent, get_available_agents, set_agent, get_current_ag
 from core.pipeline import EvaluationPipeline
 from env.environment import ASCDCEnvironment
 from grader.grader import ASCDCGrader
+<<<<<<< HEAD
+=======
+from models import ObservationModel, StepResponseModel
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 from tasks.definitions import TASKS
 
 
 logger = logging.getLogger(__name__)
+<<<<<<< HEAD
+=======
+MAX_CONCURRENT_ENVS = 32
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 
 app = FastAPI()
 app.title = "ASCDC OpenEnv"
@@ -175,6 +183,26 @@ def root():
     return _json_safe({"message": "ASCDC API running"})
 
 
+<<<<<<< HEAD
+=======
+@app.get("/schema")
+def schema():
+    return {
+        "action_space": {
+            "type": ["scale", "restart", "throttle", "noop"],
+            "target": ["A", "B", "C"],
+            "magnitude": "float"
+        },
+        "observation_space": {
+            "pressure": "float",
+            "latency": "float",
+            "instability": "float",
+            "budget": "float"
+        }
+    }
+
+
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
 @app.post(
     "/reset",
     summary="Reset active environment",
@@ -282,18 +310,40 @@ def step(action: Dict[str, Any]):
         counterfactual = counterfactual_evaluator.evaluate(active_env, normalized_action)
         obs, reward, done, info = active_env.step(normalized_action)
         info.update(counterfactual)
+<<<<<<< HEAD
+=======
+        info["decision_quality"] = info.get("counterfactual_impact", 0.0)
+        info["was_action_necessary"] = info.get("counterfactual_impact", 0.0) > 0
+        info["counterfactual_gap"] = info.get("counterfactual_gap", info.get("counterfactual_impact", 0.0))
+        info["best_alternative"] = info.get("best_alternative")
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
         
         # Update simple metrics
         update_metrics(reward, normalized_action, info, pre_observation, obs)
         
         duration = time.time() - start
         logger.info("[STEP] took %.4fs", duration)
+<<<<<<< HEAD
         return _json_safe({
             "observation": obs,
             "reward": reward,
             "done": done,
             "info": info
         })
+=======
+        obs_dict = {
+            "pressure": obs.system_pressure,
+            "latency": obs.latency,
+            "instability": obs.instability_score,
+            "budget": obs.remaining_budget,
+        }
+        return StepResponseModel(
+            observation=ObservationModel(**obs_dict),
+            reward=reward,
+            done=done,
+            info=info
+        )
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
     except HTTPException:
         raise
     except Exception as e:

@@ -80,3 +80,26 @@ class State(BaseModel):
     failure_flags: Dict[str, bool] = Field(default_factory=dict)
     history: List[Dict[str, Any]] = Field(default_factory=list)
     seed: Optional[int] = None
+<<<<<<< HEAD
+=======
+
+
+class ActionModel(BaseModel):
+    type: str
+    target: Optional[str] = None
+    magnitude: Optional[float] = 1.0
+
+
+class ObservationModel(BaseModel):
+    pressure: float
+    latency: float
+    instability: float
+    budget: float
+
+
+class StepResponseModel(BaseModel):
+    observation: ObservationModel
+    reward: float
+    done: bool
+    info: Dict[str, Any]
+>>>>>>> 3f8b51ce07d34fbefba8a351d57cc42f33924908
