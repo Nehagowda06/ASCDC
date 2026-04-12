@@ -18,6 +18,9 @@ export function Button({
   className,
   variant = "secondary",
   type = "button",
+  children,
+  onClick,
+  disabled,
   ...props
 }: ButtonProps) {
   return (
@@ -28,7 +31,11 @@ export function Button({
         variantClasses[variant],
         className,
       )}
+      onClick={onClick}
+      disabled={disabled}
       {...props}
-    />
+    >
+      {children}
+    </button>
   );
 }
