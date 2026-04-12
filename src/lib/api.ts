@@ -11,38 +11,11 @@ import type {
   TrajectoryStep,
 } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE?.trim();
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+console.log("API_BASE_URL:", API_BASE_URL);
+
 let baselineResultsCache: BaselineResults | null = null;
 let baselineResultsPromise: Promise<BaselineResults> | null = null;
-
-function getApiBaseCandidates() {
-  if (API_BASE) {
-    return [API_BASE.replace(/\/+$/, "")];
-  }
-
-  if (typeof window === "undefined") {
-    return ["http://localhost:8000"];
-  }
-
-  const { hostname, origin, port, protocol } = window.location;
-  const candidates: string[] = [];
-  const normalizedOrigin = origin.replace(/\/+$/, "");
-
-  if (protocol.startsWith("http") && (port === "5173" || port === "4173")) {
-    candidates.push(`${protocol}//${hostname}:8000`);
-    candidates.push(normalizedOrigin);
-  } else if (protocol.startsWith("http")) {
-    candidates.push(normalizedOrigin);
-    candidates.push(`${protocol}//${hostname}:8000`);
-  } else {
-    candidates.push("http://localhost:8000");
-  }
-
-  candidates.push("http://127.0.0.1:8000");
-  candidates.push("http://localhost:8000");
-
-  return [...new Set(candidates.map((candidate) => candidate.replace(/\/+$/, "")))];
-}
 
 async function parseError(response: Response) {
   const payload = await response.json().catch(() => null);
@@ -61,11 +34,8 @@ async function parseError(response: Response) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (const apiBase of getApiBaseCandidates()) {
-    try {
-      const response = await fetch(`${apiBase}${path}`, {
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
         headers: {
           "Content-Type": "application/json",
           ...(init?.headers ?? {}),
@@ -79,16 +49,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
       return response.json() as Promise<T>;
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Request failed.");
-
-      // Only fall through to the next candidate for network-level failures.
-      if (!/Failed to fetch|NetworkError|Load failed/i.test(lastError.message)) {
-        throw lastError;
-      }
+      throw error instanceof Error ? error : new Error("Request failed.");
     }
-  }
-
-  throw lastError ?? new Error("Request failed.");
 }
 
 function normalizeAction(action: AgentAction) {

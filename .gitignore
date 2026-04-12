@@ -11,3 +11,29 @@ dist/
 
 # Misc
 .env
+# Node
+node_modules/
+dist/
+build/
+
+# Vite
+.vite/
+
+# Env
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid

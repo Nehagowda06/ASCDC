@@ -256,6 +256,68 @@ This demonstrates delayed causality and irreversible system degradation.
 
 ---
 
+## Deployment
+
+### Quick Deploy (Recommended)
+
+For a complete deployment with both frontend and backend:
+
+**Linux/macOS:**
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+**Windows:**
+```cmd
+deploy.bat
+```
+
+This will:
+- Build Docker images for backend and frontend
+- Start all services (backend, frontend, nginx proxy)
+- Perform health checks
+- Provide access URLs
+
+**Access URLs:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000  
+- Nginx proxy: http://localhost:80
+
+### Manual Docker Deployment
+
+**Backend only:**
+```bash
+docker build -t ascdc .
+docker run -p 8000:8000 ascdc
+```
+
+**Full stack with Docker Compose:**
+```bash
+docker-compose up -d
+```
+
+**Useful commands:**
+```bash
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Restart services
+docker-compose restart
+
+# Check status
+docker-compose ps
+```
+
+### Native Development Deployment
+
+For development without Docker, follow the "Running the Project" section above.
+
+---
+
 ## Audit
 
 Run full system audit:
