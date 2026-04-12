@@ -262,7 +262,7 @@ export default function App() {
       }
 
       if (!cancelled) {
-        setError(failures.length > 0 ? failures.join(" ") : null);
+        setError(failures.length > 0 ? failures.join(" | ") : null);
       }
     }
 
@@ -448,7 +448,8 @@ export default function App() {
       setAutoStatus(nextAutoStatus);
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to refresh analysis.");
+      const message = nextError instanceof Error ? nextError.message : "Unknown error";
+      setError(`Unable to refresh analysis: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -474,7 +475,8 @@ export default function App() {
       setSelectedTask(taskId ?? selectedTask);
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to reset environment.");
+      const message = nextError instanceof Error ? nextError.message : "Unknown error";
+      setError(`Unable to reset environment: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -521,7 +523,8 @@ export default function App() {
       setSimpleMetrics(nextMetrics);
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Unable to step environment.");
+      const message = nextError instanceof Error ? nextError.message : "Unknown error";
+      setError(`Unable to step environment: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -554,7 +557,8 @@ export default function App() {
       setSimpleMetrics(nextMetrics);
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Failed to switch agent.");
+      const message = nextError instanceof Error ? nextError.message : "Unknown error";
+      setError(`Failed to switch agent: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -568,7 +572,8 @@ export default function App() {
       setSimpleMetrics(nextMetrics);
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Failed to reset metrics.");
+      const message = nextError instanceof Error ? nextError.message : "Unknown error";
+      setError(`Failed to reset metrics: ${message}`);
     } finally {
       setLoading(false);
     }

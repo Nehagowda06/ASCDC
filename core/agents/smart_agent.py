@@ -7,10 +7,21 @@ from env.environment import ASCDCEnvironment
 
 
 class SmartAgent:
+    """Horizon-based rollout planning agent for ASCDC environment.
+    
+    Evaluates 2-step action sequences through environment simulation to select
+    best action considering delayed effects. Includes proactive drift detection,
+    emergency mode for firestorms, and planned action sequences.
+    """
     PERSISTENT_QUEUE_THRESHOLD = 4
     requires_env = True
 
     def __init__(self, horizon: int = 10):
+        """Initialize agent with planning horizon.
+        
+        Args:
+            horizon: Number of steps to simulate for sequence evaluation
+        """
         self.base_horizon = max(1, int(horizon))
         self.horizon = self.base_horizon
         self._queue_persistence: Dict[str, int] = {queue: 0 for queue in ("A", "B", "C")}
@@ -24,8 +35,21 @@ class SmartAgent:
         self.emergency_horizon_boost = 8
         self.consecutive_firestorm_steps = 0
         self.target_focus = 2
+        self.collapse_prevention_threshold = 4.5  # Critical: prevent system collapse
 
     def act(self, env: Any) -> Dict[str, Any]:
+        """Select best action via sequence evaluation and planning.
+        
+        Evaluates candidate action sequences, applies pressure-aware thresholds,
+        and manages planned action queue. Includes proactive drift detection and
+        emergency mode for high-pressure scenarios.
+        
+        Args:
+            env: Environment instance
+            
+        Returns:
+            Action dict with 'type' and 'target' keys
+        """
         snapshot = self._normalize_observation(env)
         self._update_queue_persistence(snapshot)
         self._update_proactive_mode(snapshot)
@@ -33,6 +57,7 @@ class SmartAgent:
         system_pressure = float(snapshot.get("system_pressure", 0.0))
         is_firestorm = system_pressure > self.firestorm_threshold
         is_extreme_firestorm = system_pressure > self.extreme_firestorm_threshold
+        is_collapse_risk = system_pressure > self.collapse_prevention_threshold
 
         if is_extreme_firestorm:
             self.horizon = self.base_horizon + self.emergency_horizon_boost
@@ -43,6 +68,11 @@ class SmartAgent:
         else:
             self.horizon = self.base_horizon
             self.consecutive_firestorm_steps = 0
+
+        # CRITICAL: Prevent system collapse by forcing action in extreme conditions
+        if is_collapse_risk:
+            highest_queue = self._highest_queue(snapshot)
+            return {"type": "restart", "target": highest_queue}
 
         if sum(float(value or 0.0) for value in snapshot.get("queues", {}).values()) < 0.1:
             action = {"type": "noop", "target": None}
@@ -113,6 +143,19 @@ class SmartAgent:
         observation: Dict[str, Any],
         actions: List[Dict[str, Any]],
     ) -> float:
+        """Evaluate action sequence through environment simulation.
+        
+        Simulates sequence for horizon steps with 0.85 discount factor.
+        Applies pressure-based bonuses/penalties and instability penalties.
+        
+        Args:
+            env: Environment instance
+            observation: Current observation dict
+            actions: Sequence of action dicts to evaluate
+            
+        Returns:
+            Scalar score for the sequence
+        """
         env_copy = self._clone_env(env)
         starting_pressure = float(observation.get("system_pressure", 0.0) or 0.0)
         total = 0.0

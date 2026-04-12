@@ -5,16 +5,38 @@ import math
 from typing import Any, Dict, Iterable, Mapping
 
 from env.environment import COUNTERFACTUAL_HORIZON
+from core.constants import (
+    COUNTERFACTUAL_NECESSITY_IMPACT_THRESHOLD,
+    COUNTERFACTUAL_NECESSITY_RATIO_THRESHOLD,
+    COUNTERFACTUAL_MEANINGFUL_IMPACT_THRESHOLD,
+    COUNTERFACTUAL_MEANINGFUL_RATIO_THRESHOLD,
+)
 
 
 class CounterfactualEvaluator:
+    """Evaluates action necessity through parallel rollout comparison.
+    
+    Compares action outcome against noop baseline to measure decision necessity.
+    Uses deterministic cloning and nested guards to ensure fair evaluation.
+    """
+
     def __init__(self) -> None:
+        """Initialize evaluator with horizon and thresholds."""
         self.horizon = COUNTERFACTUAL_HORIZON
-        self.min_significant_impact = 0.75
-        self.min_positive_impact = 0.4
-        self.relative_impact_floor = 0.12
+        self.min_significant_impact = COUNTERFACTUAL_NECESSITY_IMPACT_THRESHOLD
+        self.min_positive_impact = COUNTERFACTUAL_MEANINGFUL_IMPACT_THRESHOLD
+        self.relative_impact_floor = COUNTERFACTUAL_NECESSITY_RATIO_THRESHOLD
 
     def evaluate(self, env: Any, action: Any) -> Dict[str, Any]:
+        """Evaluate action necessity via counterfactual rollout.
+        
+        Args:
+            env: Environment instance to evaluate in
+            action: Action dict with 'type' and 'target' keys
+            
+        Returns:
+            Dict with counterfactual_impact, was_action_necessary, etc.
+        """
         # Guard against nested counterfactuals
         if getattr(env, "_cf_active", False):
             return {
@@ -42,6 +64,18 @@ class CounterfactualEvaluator:
         }
 
     def _simulate(self, env: Any, initial_action: Any) -> float:
+        """Simulate environment for horizon steps with given initial action.
+        
+        Only the first action is applied; subsequent steps use noop.
+        This isolates the effect of the initial action.
+        
+        Args:
+            env: Environment to simulate
+            initial_action: First action to apply
+            
+        Returns:
+            Total discounted reward over horizon
+        """
         simulated_env = deepcopy(env)
         if hasattr(env, "rng") and hasattr(simulated_env, "rng"):
             simulated_env.rng.setstate(env.rng.getstate())
@@ -62,6 +96,16 @@ class CounterfactualEvaluator:
         return self._safe_float(total_reward)
 
     def _has_meaningful_impact(self, action: Any, impact: float, impact_ratio: float) -> bool:
+        """Check if action had meaningful positive impact.
+        
+        Args:
+            action: Action to evaluate
+            impact: Counterfactual impact value
+            impact_ratio: Impact ratio relative to noop baseline
+            
+        Returns:
+            True if impact >= threshold and ratio >= threshold
+        """
         return (
             self._get_action_type(action) != "noop"
             and impact >= self.min_positive_impact
@@ -69,6 +113,16 @@ class CounterfactualEvaluator:
         )
 
     def _is_action_necessary(self, action: Any, impact: float, impact_ratio: float) -> bool:
+        """Check if action was necessary (significant improvement over noop).
+        
+        Args:
+            action: Action to evaluate
+            impact: Counterfactual impact value
+            impact_ratio: Impact ratio relative to noop baseline
+            
+        Returns:
+            True if impact >= necessity threshold and ratio >= threshold
+        """
         return (
             self._get_action_type(action) != "noop"
             and impact >= self.min_significant_impact
@@ -92,6 +146,19 @@ class CounterfactualEvaluator:
 
 
 def compute_counterfactual_metrics(trajectory: Iterable[Mapping[str, Any]]) -> Dict[str, float]:
+    """Compute aggregate counterfactual metrics from trajectory.
+    
+    Analyzes all non-noop actions in trajectory to compute:
+    - Ratio of necessary actions
+    - Average counterfactual impact
+    - Rate of positive-impact actions
+    
+    Args:
+        trajectory: Sequence of step dicts with 'action' and 'info' keys
+        
+    Returns:
+        Dict with necessary_action_ratio, average_impact, positive_impact_rate
+    """
     steps = list(trajectory)
     action_steps = [
         step

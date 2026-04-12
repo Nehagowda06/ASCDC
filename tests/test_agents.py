@@ -174,10 +174,9 @@ class TestSmartAgent:
         # Verify action is valid
         assert action1["type"] in ["noop", "restart", "scale", "throttle"]
         
-        # Verify cooldown tracking works
-        initial_cooldown = self.agent.action_cooldown
-        self.agent.action_cooldown = 2
-        assert self.agent.action_cooldown == 2
+        # Verify agent tracks last action
+        assert self.agent.last_action is not None
+        assert self.agent.last_action["type"] in ["noop", "restart", "scale", "throttle"]
 
     def test_smart_agent_prefers_noop_when_close(self):
         """Smart agent should prefer noop if action barely better."""

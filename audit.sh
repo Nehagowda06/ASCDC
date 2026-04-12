@@ -2,20 +2,20 @@
 
 set -e
 
-echo "🔍 Running Structural Audit (mypy + ruff)..."
+echo " Running Structural Audit (mypy + ruff)..."
 mypy . || exit 1
 ruff check . || exit 1
 
-echo "⚙️ Running Unit & Contract Tests..."
+echo " Running Unit & Contract Tests..."
 pytest -q || exit 1
 
-echo "🚀 Running Pipeline Smoke Test (inference)..."
+echo " Running Pipeline Smoke Test (inference)..."
 python inference.py > /dev/null 2>&1 || {
-    echo "❌ inference.py failed"
+    echo " inference.py failed!!!"
     exit 1
 }
 
-echo "🧪 Running Environment Execution Check..."
+echo " Running Environment Execution Check..."
 python - <<EOF
 from env.environment import ASCDCEnvironment
 
@@ -27,13 +27,13 @@ for _ in range(10):
 print("Env OK")
 EOF
 
-echo "🔎 Checking for silent failures (grep)..."
-grep -R "except Exception:" -n . && echo "⚠️ Found unsafe exception handlers"
+echo " Checking for silent failures (grep)..."
+grep -R "except Exception:" -n . && echo " Found unsafe exception handlers"
 
-echo "🧠 Checking API integrity..."
+echo " Checking API integrity..."
 python - <<EOF
 from server.app import app
 print("API OK")
 EOF
 
-echo "✅ ALL AUDITS PASSED"
+echo " ALL AUDITS PASSED"

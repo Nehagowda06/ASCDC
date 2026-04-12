@@ -19,9 +19,20 @@ class ASCDCGrader:
         self.stabilization_horizon = 3
 
     def grade(self, trajectory: Iterable[Mapping[str, Any]]) -> float:
-        """
-        Returns score between 0.0 and 1.0
-        Deterministic
+        """Grade trajectory on stability, timing, and smoothness (0.0-1.0).
+        
+        Combines three weighted scores:
+        - Stability (40%): latency + pressure + transition stability
+        - Timing (40%): missed interventions vs unnecessary actions vs timely actions
+        - Smoothness (20%): pressure oscillation + action oscillation
+        
+        Applies 0.2x penalty if system collapsed (pressure > 5.0).
+        
+        Args:
+            trajectory: Sequence of step dicts with observation, action, next_observation, info
+            
+        Returns:
+            Deterministic score in [0.0, 1.0]
         """
         steps = list(trajectory)
         if not steps:
@@ -64,6 +75,16 @@ class ASCDCGrader:
         latencies: Sequence[float],
         step_metrics: Sequence[Mapping[str, Any]],
     ) -> float:
+        """Compute stability score from latency, pressure, and transition stability.
+        
+        Args:
+            pressures: Sequence of system pressure values
+            latencies: Sequence of latency values
+            step_metrics: Sequence of step metric dicts
+            
+        Returns:
+            Score in [0.0, 1.0]
+        """
         avg_latency = sum(latencies) / len(latencies) if latencies else 0.0
         avg_pressure = sum(pressures) / len(pressures) if pressures else 0.0
         avg_transition_stability = (
@@ -77,6 +98,17 @@ class ASCDCGrader:
         return clamp(0.35 * latency_score + 0.25 * pressure_score + 0.4 * avg_transition_stability)
 
     def _timing_score(self, step_metrics: Sequence[Mapping[str, Any]]) -> float:
+        """Compute timing score from intervention necessity and action timing.
+        
+        Rewards timely actions when necessary, penalizes missed interventions and
+        unnecessary actions.
+        
+        Args:
+            step_metrics: Sequence of step metric dicts
+            
+        Returns:
+            Score in [0.0, 1.0]
+        """
         missed_interventions = 0
         unnecessary_actions = 0
         timely_actions = 0
@@ -112,6 +144,10 @@ class ASCDCGrader:
             if total_actions > 0 else 0.5
         )
 
+        # Reduce unnecessary action penalty if total actions are few (better to act than collapse)
+        if total_actions <= 2:
+            unnecessary_penalty *= 0.5
+
         score = 0.35 + 0.45 * timely_reward - 0.35 * missed_penalty - 0.25 * unnecessary_penalty
         return clamp(score)
 
@@ -120,6 +156,18 @@ class ASCDCGrader:
         steps: Sequence[Mapping[str, Any]],
         step_metrics: Sequence[Mapping[str, Any]],
     ) -> float:
+        """Compute smoothness score penalizing pressure and action oscillation.
+        
+        Detects sign flips in pressure deltas and action type changes to penalize
+        thrashing behavior.
+        
+        Args:
+            steps: Sequence of step dicts
+            step_metrics: Sequence of step metric dicts
+            
+        Returns:
+            Score in [0.0, 1.0]
+        """
         significant_signs: List[int] = []
         for metrics in step_metrics:
             delta = float(metrics["pressure_delta"])

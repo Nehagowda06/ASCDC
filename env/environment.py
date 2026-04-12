@@ -8,6 +8,29 @@ import math
 import random
 
 from core.evaluation_metrics import evaluate_step_metrics
+from core.constants import (
+    INSTABILITY_GROWTH_RATE,
+    INSTABILITY_PRESSURE_TRIGGER,
+    INSTABILITY_DECAY_RATE,
+    INSTABILITY_RESET_DELTA,
+    INSTABILITY_RESET_MULTIPLIER,
+    INSTABILITY_ESCALATION_CAP,
+    INSTABILITY_ESCALATION_FACTOR,
+    PRESSURE_RETRY_WEIGHT,
+    PRESSURE_ERROR_WEIGHT,
+    PRESSURE_RETRY_BASE_WEIGHT,
+    PRESSURE_UTILIZATION_WEIGHT,
+    PRESSURE_MAX_RETRY,
+    PRESSURE_MAX_ERROR,
+    DRIFT_ACCUMULATION_RATE,
+    DRIFT_ACCUMULATION_THRESHOLD,
+    DRIFT_DECAY_RATE,
+    DRIFT_SMOOTHING_WEIGHT,
+    RETRY_ESCALATION_BASE,
+    RETRY_ESCALATION_INSTABILITY_WEIGHT,
+    ERROR_ESCALATION_BASE,
+    ERROR_ESCALATION_INSTABILITY_WEIGHT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +69,9 @@ class ASCDCEnvironment:
     ACTION_COSTS = {"noop": 0.0, "restart": 3.0, "scale": 5.0, "throttle": 2.0}
     ACTION_LOCK_DURATIONS = {"restart": 2, "scale": 3}
     ACTION_REJECTION_PENALTY = 0.4
-    INSTABILITY_PRESSURE_THRESHOLD = 1.25
-    INSTABILITY_RESET_DELTA = 0.15
+    INSTABILITY_PRESSURE_THRESHOLD = INSTABILITY_PRESSURE_TRIGGER
+    INSTABILITY_RESET_DELTA = INSTABILITY_RESET_DELTA
+    INSTABILITY_GROWTH_RATE = INSTABILITY_GROWTH_RATE
     INSTABILITY_GROWTH_RATE = 0.45
     STABLE_NOOP_PRESSURE_THRESHOLD = 0.75
     STABLE_NOOP_QUEUE_THRESHOLD = 0.35
@@ -529,6 +553,12 @@ class ASCDCEnvironment:
     # ---------------- METRICS ---------------- #
 
     def _update_metrics(self) -> None:
+        """Update system metrics: pressure, instability, drift, latency.
+        
+        Computes multi-factor system pressure from utilization, retry, and error rates.
+        Accumulates instability exponentially when pressure exceeds threshold.
+        Tracks drift (latent degradation) and escalates retry/error rates.
+        """
         utilization = sum(
             self.queues[queue] / max(self.capacities.get(queue, 1.0), 1.0)
             for queue in self.QUEUE_ORDER
@@ -598,6 +628,18 @@ class ASCDCEnvironment:
     # ---------------- REWARD ---------------- #
 
     def _compute_reward(self, action: Dict[str, Any], step_metrics: Dict[str, Any]) -> float:
+        """Compute multi-objective reward balancing stability, timing, and efficiency.
+        
+        Combines penalties for latency, queue pressure, retry/error rates with bonuses
+        for pressure improvement, timely actions, and strategic waiting.
+        
+        Args:
+            action: Action dict with 'type' key
+            step_metrics: Dict with stability, pressure_delta, necessity, timing_window, etc.
+            
+        Returns:
+            Scalar reward value
+        """
         latency_penalty = sum(self.latencies.values()) / len(self.latencies)
         queue_pressure_penalty = sum(
             self.queues[queue] / max(self.capacities.get(queue, 1.0), 1.0)

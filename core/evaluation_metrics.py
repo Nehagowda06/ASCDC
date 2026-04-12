@@ -13,16 +13,19 @@ HIGH_INSTABILITY_THRESHOLD = 0.75
 
 
 def clamp(value: float) -> float:
+    """Clamp value to [0.0, 1.0] range."""
     return max(0.0, min(1.0, value))
 
 
 def get_action_type(action: Any) -> str:
+    """Extract action type from action dict or object."""
     if isinstance(action, Mapping):
         return str(action.get("type") or action.get("action_type") or "noop").lower()
     return str(getattr(action, "type", getattr(action, "action_type", "noop"))).lower()
 
 
 def extract_pressure(state: Any) -> float:
+    """Extract system pressure from state dict or object."""
     if isinstance(state, Mapping):
         value = state.get("system_pressure", state.get("pressure", 0.0))
         return float(value or 0.0)
@@ -31,6 +34,7 @@ def extract_pressure(state: Any) -> float:
 
 
 def extract_instability(state: Any) -> float:
+    """Extract instability score from state dict or object."""
     if isinstance(state, Mapping):
         value = state.get("instability_score", 0.0)
         return float(value or 0.0)
@@ -39,6 +43,21 @@ def extract_instability(state: Any) -> float:
 
 
 def evaluate_step_metrics(state: Any, action: Any, next_state: Any) -> Dict[str, Any]:
+    """Evaluate step metrics: pressure delta, stability, necessity, timing.
+    
+    Computes multi-dimensional metrics for a single step including:
+    - Pressure change and stability
+    - Action necessity (based on pressure and instability)
+    - Timing window (whether action was timely)
+    
+    Args:
+        state: Current state dict or object
+        action: Action dict or object
+        next_state: Next state dict or object
+        
+    Returns:
+        Dict with pressure, stability, necessity, timing_window, etc.
+    """
     pressure = extract_pressure(state)
     next_pressure = extract_pressure(next_state)
     pressure_delta = next_pressure - pressure

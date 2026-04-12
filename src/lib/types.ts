@@ -1,116 +1,85 @@
-export type QueueKey = "A" | "B" | "C";
-export type QueueMap = Record<string, number>;
-
-export type PendingAction = {
-  type: string;
-  target: string | null;
-  applies_at: number;
-  magnitude?: number;
-};
-
-export type PendingEffect = {
-  type: string;
-  target: string | null;
-  magnitude?: number;
-  apply_at: number;
-};
-
-export type FailureFlags = {
-  budget_exhausted?: boolean;
-  queue_overflow?: boolean;
-  latency_spike?: boolean;
-  error_spike?: boolean;
-  collapsed?: boolean;
-};
-
-export type Observation = {
-  queues: QueueMap;
-  capacities?: QueueMap;
-  latencies?: QueueMap;
+export type EnvironmentState = {
+  timestep?: number;
+  queues: Record<string, number>;
+  capacities?: Record<string, number>;
+  latencies?: Record<string, number>;
   latency?: number;
   retry_rate?: number;
   error_rate?: number;
   remaining_budget?: number;
   budget?: number;
   system_pressure?: number;
-  instability_score?: number;
-  drift_score?: number;
-  steps_since_action?: number;
   pending_actions?: PendingAction[];
-  pending_effects?: PendingEffect[];
-  timestep?: number;
+  instability_score?: number;
+  smoothed_drift?: number;
+  failure_flags?: FailureFlags;
   done?: boolean;
 };
 
-export type EnvironmentState = Observation & {
-  history_length?: number;
-  active_locks?: Record<string, number>;
-  true_load?: QueueMap;
-  delayed_effect_queue?: Record<string, Array<Record<string, unknown>>>;
-  failure_flags?: FailureFlags;
-  history?: TrajectoryStep[];
-  seed?: number;
+export type FailureFlags = {
+  collapsed?: boolean;
+};
+
+export type PendingAction = {
+  type: string;
+  target?: string;
+  applies_at: number;
 };
 
 export type AgentAction = {
   type: string;
+  action_type: string;
   target: string | null;
-  action_type?: string;
-  amount?: number | null;
-};
-
-export type StepInfo = {
-  latency: number;
-  system_pressure: number;
-  remaining_budget: number;
-  instability_score?: number;
-  drift_score?: number;
-  steps_since_action?: number;
-  queue_growth?: number;
-  scheduled_timestep?: number;
-  pressure_delta?: number;
-  stability_score?: number;
-  counterfactual_impact?: number;
-  was_action_necessary?: boolean;
-  failure_flags: FailureFlags;
+  amount?: number;
 };
 
 export type StepResponse = {
-  observation: Observation;
+  observation: EnvironmentState;
   reward: number;
   done: boolean;
-  info: StepInfo & Record<string, unknown>;
+  info: StepInfo;
 };
 
-export type TaskItem = {
-  name: string;
-  description: string;
+export type StepInfo = {
+  latency?: number;
+  stability?: number;
+  pressure_delta?: number;
+  necessity?: boolean;
+  timing_window?: boolean;
+  counterfactual_impact?: number;
+  was_action_necessary?: boolean;
+  had_meaningful_impact?: boolean;
+  failure_flags?: FailureFlags;
+  system_pressure?: number;
+  remaining_budget?: number;
+  instability_score?: number;
+  smoothed_drift?: number;
+  [key: string]: unknown;
 };
 
-export type TaskMap = Record<string, TaskItem>;
-export type BaselineResults = Record<string, Record<string, number>>;
-export type AutoRunnerStatus = {
-  running: boolean;
-  done?: boolean;
-  interval?: number | null;
-  steps_run?: number;
-  stop_reason?: string;
-  agent_name?: string;
-  last_reward?: number | null;
-  last_action?: AgentAction | null;
-  last_info?: Record<string, unknown>;
-  state?: EnvironmentState;
-};
-export type SystemLogEntry = {
+export type Observation = EnvironmentState;
+
+export type TrajectoryStep = {
   timestep: number;
+  observation: EnvironmentState;
   action: AgentAction;
   reward: number;
-  pressure: number;
-  instability: number;
-  counterfactual: number;
+  next_observation: EnvironmentState;
+  done: boolean;
+  info: StepInfo;
 };
 
-export type RecommendationAlternative = {
+export type RecommendationResponse = {
+  action: AgentAction;
+  impact: number;
+  was_necessary: boolean;
+  confidence: number;
+  explanation: string;
+  evaluated_actions: EvaluatedAction[];
+  reasoning: RecommendationReasoning;
+};
+
+export type EvaluatedAction = {
   action: AgentAction;
   label: string;
   impact: number;
@@ -122,23 +91,13 @@ export type RecommendationReasoning = {
   confidence: number;
   impact: number;
   was_necessary: boolean;
-  alternative_actions: RecommendationAlternative[];
-  explanation?: string;
+  alternative_actions: EvaluatedAction[];
+  explanation: string;
   agent_name?: string;
   agent_action?: string;
-  agent_action_impact?: number | null;
-  agent_action_rank?: number | null;
+  agent_action_impact?: number;
+  agent_action_rank?: number;
   agent_action_matches_best?: boolean;
-};
-
-export type RecommendationResponse = {
-  action: AgentAction;
-  impact: number;
-  was_necessary: boolean;
-  confidence: number;
-  explanation: string;
-  evaluated_actions: RecommendationAlternative[];
-  reasoning: RecommendationReasoning;
 };
 
 export type DecisionMetrics = {
@@ -148,37 +107,61 @@ export type DecisionMetrics = {
   positiveImpactRate: number;
 };
 
-export type TrajectoryStep = {
-  timestep: number;
-  observation: Observation;
-  action: AgentAction;
-  reward: number;
-  next_observation: Observation;
-  done: boolean;
-  info: StepInfo & Record<string, unknown>;
+export type AutoRunnerStatus = {
+  running: boolean;
+  state?: EnvironmentState;
+  last_action?: AgentAction;
 };
 
-export const EMPTY_OBSERVATION: Observation = {
-  queues: { A: 0, B: 0, C: 0 },
-  capacities: { A: 0, B: 0, C: 0 },
-  latencies: { A: 0, B: 0, C: 0 },
-  latency: 0,
-  retry_rate: 0,
-  error_rate: 0,
-  remaining_budget: 0,
-  budget: 0,
-  system_pressure: 0,
-  pending_actions: [],
-  timestep: 0,
-  done: false,
+export type SystemLogEntry = {
+  timestep: number;
+  action: string;
+  pressure: number;
+  instability: number;
+  counterfactual_impact: number;
+  decision_rationale: string;
+};
+
+export type TaskMap = Record<string, TaskDefinition>;
+
+export type TaskDefinition = {
+  name: string;
+  description?: string;
+  config: TaskConfig;
+};
+
+export type TaskConfig = {
+  seed?: number;
+  base_load?: Record<string, number>;
+  capacities?: Record<string, number>;
+  initial_queues?: Record<string, number>;
+  initial_budget?: number;
+  max_timesteps?: number;
+};
+
+export type BaselineResults = {
+  [agentName: string]: {
+    score: number;
+    total_reward: number;
+    steps: number;
+    collapsed: boolean;
+  };
 };
 
 export const EMPTY_STATE: EnvironmentState = {
-  ...EMPTY_OBSERVATION,
-  failure_flags: {
-    collapsed: false,
-  },
-  true_load: { A: 0, B: 0, C: 0 },
-  history: [],
-  seed: 42,
+  timestep: 0,
+  queues: { A: 0, B: 0, C: 0 },
+  capacities: { A: 10, B: 10, C: 10 },
+  latencies: { A: 1, B: 1, C: 1 },
+  latency: 1,
+  retry_rate: 0,
+  error_rate: 0,
+  remaining_budget: 100,
+  budget: 100,
+  system_pressure: 0,
+  pending_actions: [],
+  instability_score: 0,
+  smoothed_drift: 0,
+  failure_flags: { collapsed: false },
+  done: false,
 };

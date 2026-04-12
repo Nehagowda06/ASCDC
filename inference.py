@@ -135,8 +135,9 @@ def run_task(task_id: str, task_cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     trajectory: List[Dict[str, Any]] = []
     step_idx = 0
+    max_steps = task_cfg.get("max_timesteps", 100)
 
-    while True:
+    while step_idx < max_steps:
         # 1. Agent generates action via planning
         snapshot  = env._build_observation()
         action    = agent.act(env) if hasattr(agent, "requires_env") else agent.act(snapshot)
